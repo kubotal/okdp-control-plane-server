@@ -11,7 +11,7 @@ import (
 )
 
 // SetupRouter initializes the Gin router and defines routes
-func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, identityHandler *handlers.IdentityHandler, secretStoreHandler *handlers.SecretStoreHandler, externalSecretHandler *handlers.ExternalSecretHandler, serviceHandler *handlers.ServiceHandler, sparkHandler *handlers.SparkHandler, connectionHandler *handlers.ConnectionHandler) *gin.Engine {
+func SetupRouter(cfg *config.Config, capabilitiesHandler *handlers.CapabilitiesHandler, projectHandler *handlers.ProjectHandler, identityHandler *handlers.IdentityHandler, secretStoreHandler *handlers.SecretStoreHandler, externalSecretHandler *handlers.ExternalSecretHandler, serviceHandler *handlers.ServiceHandler, sparkHandler *handlers.SparkHandler, connectionHandler *handlers.ConnectionHandler) *gin.Engine {
 	r := gin.New() // Use New() to skip default logger/recovery (we add them manually)
 
 	// Middleware
@@ -30,6 +30,9 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 	// API Routes
 	api := r.Group("/api")
 	{
+		// Platform capabilities (UI feature discovery)
+		api.GET("/capabilities", capabilitiesHandler.GetCapabilities)
+
 		// Projects (backed by Kubernetes Namespaces)
 		api.GET("/projects", projectHandler.ListProjects)
 		api.GET("/projects/stream", projectHandler.StreamProjects)
@@ -38,14 +41,19 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		api.PUT("/projects/:name", projectHandler.UpdateProject)
 		api.DELETE("/projects/:name", projectHandler.DeleteProject)
 
-		// Identity. The whole group rests on the kubauth CRDs, which an
-		// installation may not carry at all: guard it once here rather than in
-		// each handler, so a route added later cannot slip through unguarded.
-		identity := api.Group("/v1/identity", handlers.RequireFeature(
-			func(c *gin.Context) bool { return identityHandler.Available(c.Request.Context()) },
-			"kubauth identity",
-			"Identity management is not available on this cluster: the kubauth CRDs are not installed.",
-		))
+		// Identity. Two independent conditions, both required: the configured
+		// provider must be kubauth, and its CRDs must actually be installed. A
+		// cluster can declare the provider without carrying them. Guarded once
+		// here rather than in each handler, so a route added later cannot slip
+		// through unguarded.
+		identity := api.Group("/v1/identity",
+			capabilitiesHandler.RequireIdentityAPI(),
+			handlers.RequireFeature(
+				func(c *gin.Context) bool { return identityHandler.Available(c.Request.Context()) },
+				"kubauth identity",
+				"Identity management is not available on this cluster: the kubauth CRDs are not installed.",
+			),
+		)
 		{
 			// Users
 			identity.GET("/users", identityHandler.ListUsers)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/okdp/okdp-control-plane-server/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/repository/provisioning"
 	"github.com/sirupsen/logrus"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,6 +38,19 @@ type ContextRepository interface {
 	// GetKubauthNamespace returns the namespace kubauth resources live in. It is
 	// only meaningful when clients are provisioned by kubauth.
 	GetKubauthNamespace(ctx context.Context) (string, error)
+
+	// GetIdentityProvider returns the identity provider the platform is wired to
+	// (from spec.context.identity.provider; "" when unset, meaning external).
+	// The kubauth-specific Identity API is only exposed when it is "kubauth".
+	GetIdentityProvider(ctx context.Context) (string, error)
+
+	// GetIdentityProvisioningProvider returns the OIDC client provisioning backend
+	// (from spec.context.identity.provisioning.provider; "" when unset, meaning none).
+	GetIdentityProvisioningProvider(ctx context.Context) (string, error)
+
+	// GetKeycloakProvisioningConfig returns the Keycloak adapter configuration
+	// (from spec.context.identity.provisioning.keycloak).
+	GetKeycloakProvisioningConfig(ctx context.Context) (*provisioning.KeycloakConfig, error)
 
 	// GetProfileImages returns available images per profile type from spec.context.jupyter.profiles.
 	GetProfileImages(ctx context.Context) (map[string][]models.ProfileImage, error)
@@ -164,6 +178,13 @@ func (r *k8sContextRepository) GetIdentity(ctx context.Context) (*models.Platfor
 	}
 	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "clientProvisioning")
 	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "kubauthNamespace")
+	// Two older shapes, kept so Contexts written against them keep working.
+	if namespace == "" {
+		namespace, _, _ = unstructured.NestedString(u.Object, "spec", "context", "identity", "kubauth", "namespace")
+	}
+	if namespace == "" {
+		namespace, _, _ = unstructured.NestedString(u.Object, "spec", "context", "kubauth", "namespace")
+	}
 
 	identity := &models.PlatformIdentity{
 		ClientProvisioning: provisioning,
@@ -184,6 +205,63 @@ func (r *k8sContextRepository) GetKubauthNamespace(ctx context.Context) (string,
 		return "", fmt.Errorf("clients are provisioned by %q on this platform, not by kubauth", identity.ClientProvisioning)
 	}
 	return identity.KubauthNamespace, nil
+}
+
+func (r *k8sContextRepository) GetIdentityProvider(ctx context.Context) (string, error) {
+	u, err := r.getContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	provider, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "provider")
+	return provider, nil
+}
+
+func (r *k8sContextRepository) GetIdentityProvisioningProvider(ctx context.Context) (string, error) {
+	u, err := r.getContext(ctx)
+	if err != nil {
+		return "", err
+	}
+	provider, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "provisioning", "provider")
+	return provider, nil
+}
+
+func (r *k8sContextRepository) GetKeycloakProvisioningConfig(ctx context.Context) (*provisioning.KeycloakConfig, error) {
+	u, err := r.getContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "provisioning", "keycloak", "issuerUri")
+	if issuer == "" {
+		return nil, fmt.Errorf("identity.provisioning.keycloak.issuerUri not found in Context %s/%s", r.namespace, r.name)
+	}
+
+	secretPath := []string{"spec", "context", "identity", "provisioning", "keycloak", "credentialsSecret"}
+	secretName, _, _ := unstructured.NestedString(u.Object, append(secretPath, "name")...)
+	if secretName == "" {
+		return nil, fmt.Errorf("identity.provisioning.keycloak.credentialsSecret.name not found in Context %s/%s", r.namespace, r.name)
+	}
+	secretNamespace, _, _ := unstructured.NestedString(u.Object, append(secretPath, "namespace")...)
+	clientIDKey, _, _ := unstructured.NestedString(u.Object, append(secretPath, "clientIdKey")...)
+	if clientIDKey == "" {
+		clientIDKey = "client_id"
+	}
+	clientSecretKey, _, _ := unstructured.NestedString(u.Object, append(secretPath, "clientSecretKey")...)
+	if clientSecretKey == "" {
+		clientSecretKey = "client_secret"
+	}
+	insecure, _, _ := unstructured.NestedBool(u.Object, "spec", "context", "identity", "provisioning", "keycloak", "insecureSkipTLSVerify")
+
+	return &provisioning.KeycloakConfig{
+		IssuerURI: issuer,
+		CredentialsSecret: provisioning.KeycloakSecretRef{
+			Namespace:       secretNamespace,
+			Name:            secretName,
+			ClientIDKey:     clientIDKey,
+			ClientSecretKey: clientSecretKey,
+		},
+		InsecureSkipTLSVerify: insecure,
+	}, nil
 }
 
 func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string][]models.ProfileImage, error) {

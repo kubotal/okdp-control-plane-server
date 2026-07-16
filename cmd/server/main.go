@@ -12,6 +12,7 @@ import (
 	"github.com/okdp/okdp-control-plane-server/internal/config"
 	"github.com/okdp/okdp-control-plane-server/internal/models"
 	"github.com/okdp/okdp-control-plane-server/internal/repository"
+	"github.com/okdp/okdp-control-plane-server/internal/repository/provisioning"
 	"github.com/okdp/okdp-control-plane-server/internal/service"
 )
 
@@ -69,8 +70,22 @@ func main() {
 	projectService := service.NewDefaultProjectService(projectRepo)
 	projectHandler := handlers.NewProjectHandler(projectService)
 
-	// Initialize Identity stack
-	identityRepo := repository.NewIdentityRepository(k8sClient, k8sDiscoveryClient, cfg.PlatformNamespace)
+	// Context repository (shared by capabilities, catalog and Spark)
+	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace, cfg.PlatformContextName, cfg.PlatformContextNamespace)
+
+	// Initialize Capabilities stack (platform features derived from the Context)
+	capabilityService := service.NewDefaultCapabilityService(contextRepo)
+	capabilitiesHandler := handlers.NewCapabilitiesHandler(capabilityService)
+
+	// Initialize Identity stack. The namespace is read per call from the Context,
+	// and the discovery client tells whether the kubauth CRDs are there at all.
+	kubauthNamespace := func(ctx context.Context) string {
+		if ns, err := contextRepo.GetKubauthNamespace(ctx); err == nil {
+			return ns
+		}
+		return cfg.PlatformNamespace
+	}
+	identityRepo := repository.NewIdentityRepository(k8sClient, k8sDiscoveryClient, kubauthNamespace)
 	identityService := service.NewDefaultIdentityService(identityRepo)
 	identityHandler := handlers.NewIdentityHandler(identityService)
 
@@ -86,10 +101,11 @@ func main() {
 
 	// Initialize Service stack (KuboCD Releases + Context-driven catalog)
 	serviceRepo := repository.NewServiceRepository(k8sClient)
-	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace, cfg.PlatformContextName, cfg.PlatformContextNamespace)
 	schemaService := service.NewDefaultPackageSchemaService(contextRepo)
 	schemaService.SetInsecureRegistries(cfg.InsecureOCIRegistries)
-	serviceService := service.NewDefaultServiceService(serviceRepo, contextRepo, contextWriterRepo, schemaService, k8sClient, k8sTypedClient, cfg.ContextNamespace, cfg.ReleaseInterval, cfg.ReleaseTimeout, cfg.ExcludedSidecarPrefixes)
+	// OIDC client provisioning (backend selected per call from the Context)
+	oidcProvisioner := provisioning.NewContextSelector(contextRepo, k8sClient)
+	serviceService := service.NewDefaultServiceService(serviceRepo, contextRepo, contextWriterRepo, schemaService, oidcProvisioner, k8sClient, k8sTypedClient, cfg.ContextNamespace, cfg.ReleaseInterval, cfg.ReleaseTimeout, cfg.ExcludedSidecarPrefixes)
 	serviceService.SetInsecureRegistries(cfg.InsecureOCIRegistries)
 	serviceHandler := handlers.NewServiceHandler(serviceService, schemaService)
 
@@ -116,7 +132,7 @@ func main() {
 	// nothing pointing back here.
 	checkIdentityConfiguration(context.Background(), contextRepo, identityRepo)
 
-	r := router.SetupRouter(cfg, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler, connectionHandler)
+	r := router.SetupRouter(cfg, capabilitiesHandler, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler, connectionHandler)
 
 	// Start Server
 	//
