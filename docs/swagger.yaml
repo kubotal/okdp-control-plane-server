@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  models.Capabilities:
+    properties:
+      identity:
+        $ref: '#/definitions/models.IdentityCapability'
+      oidcProvisioning:
+        $ref: '#/definitions/models.OidcProvisioningCapability'
+    type: object
   models.ConnectionCatalogResponse:
     properties:
       crdAvailable:
@@ -369,6 +376,19 @@ definitions:
       name:
         type: string
     type: object
+  models.IdentityCapability:
+    properties:
+      provider:
+        description: |-
+          Provider is the configured identity provider: "external" (BYO OIDC,
+          default) or "kubauth".
+        type: string
+      userManagement:
+        description: |-
+          UserManagement is true when the kubauth-specific user/group management
+          API (/api/v1/identity) is available.
+        type: boolean
+    type: object
   models.InternalConnection:
     properties:
       category:
@@ -424,6 +444,14 @@ definitions:
         type: string
       usedRaw:
         type: number
+    type: object
+  models.OidcProvisioningCapability:
+    properties:
+      provider:
+        description: |-
+          Provider is the configured provisioning backend: "none" (default),
+          "kubauth" or "keycloak".
+        type: string
     type: object
   models.PackageInput:
     properties:
@@ -934,6 +962,20 @@ info:
   title: OKDP Server New API
   version: "1.0"
 paths:
+  /api/capabilities:
+    get:
+      description: Capabilities the platform is configured with (identity provider,
+        user management, OIDC client provisioning), so the UI can adapt
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Capabilities'
+      summary: Get platform capabilities
+      tags:
+      - capabilities
   /api/connection-types:
     get:
       description: Descriptors of every connection type, used to build the creation

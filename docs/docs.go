@@ -24,6 +24,26 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/capabilities": {
+            "get": {
+                "description": "Capabilities the platform is configured with (identity provider, user management, OIDC client provisioning), so the UI can adapt",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "capabilities"
+                ],
+                "summary": "Get platform capabilities",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Capabilities"
+                        }
+                    }
+                }
+            }
+        },
         "/api/connection-types": {
             "get": {
                 "description": "Descriptors of every connection type, used to build the creation form, plus whether connections can currently be persisted",
@@ -3071,6 +3091,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "models.Capabilities": {
+            "type": "object",
+            "properties": {
+                "identity": {
+                    "$ref": "#/definitions/models.IdentityCapability"
+                },
+                "oidcProvisioning": {
+                    "$ref": "#/definitions/models.OidcProvisioningCapability"
+                }
+            }
+        },
         "models.ConnectionCatalogResponse": {
             "type": "object",
             "properties": {
@@ -3568,6 +3599,19 @@ const docTemplate = `{
                 }
             }
         },
+        "models.IdentityCapability": {
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "description": "Provider is the configured identity provider: \"external\" (BYO OIDC,\ndefault) or \"kubauth\".",
+                    "type": "string"
+                },
+                "userManagement": {
+                    "description": "UserManagement is true when the kubauth-specific user/group management\nAPI (/api/v1/identity) is available.",
+                    "type": "boolean"
+                }
+            }
+        },
         "models.InternalConnection": {
             "type": "object",
             "properties": {
@@ -3642,6 +3686,15 @@ const docTemplate = `{
                 },
                 "usedRaw": {
                     "type": "number"
+                }
+            }
+        },
+        "models.OidcProvisioningCapability": {
+            "type": "object",
+            "properties": {
+                "provider": {
+                    "description": "Provider is the configured provisioning backend: \"none\" (default),\n\"kubauth\" or \"keycloak\".",
+                    "type": "string"
                 }
             }
         },
