@@ -1,0 +1,49 @@
+{
+  "name": "trino",
+  "displayName": "Trino",
+  "description": "Trino distributed SQL query engine.",
+  "icon": "pi pi-server",
+  "category": "query-engine",
+  "external": false,
+  "fields": [
+    {
+      "name": "host",
+      "label": "Host",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "port",
+      "label": "Port",
+      "type": "number",
+      "required": true,
+      "default": 8080,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "name": "catalog",
+      "label": "Catalog",
+      "type": "string",
+      "required": false,
+      "placeholder": "tpch"
+    },
+    {
+      "name": "schema",
+      "label": "Schema",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "user",
+      "label": "User",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "providers": {
+    "services": ["trino"],
+    "portNames": ["http", "http-coordinator", "trino"],
+    "defaultPort": 8080
+  }
+}

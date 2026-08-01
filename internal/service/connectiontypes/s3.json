@@ -1,0 +1,57 @@
+{
+  "name": "s3",
+  "displayName": "S3 object storage",
+  "description": "S3-compatible object storage (AWS S3, MinIO, SeaweedFS, ...).",
+  "icon": "pi pi-box",
+  "category": "storage",
+  "external": true,
+  "fields": [
+    {
+      "name": "endpoint",
+      "label": "Endpoint",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://s3.example.com",
+      "help": "Leave the AWS regional endpoint out for AWS S3 itself; set it for MinIO, SeaweedFS and other S3-compatible servers."
+    },
+    {
+      "name": "bucket",
+      "label": "Bucket",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "region",
+      "label": "Region",
+      "type": "string",
+      "required": false,
+      "default": "us-east-1"
+    },
+    {
+      "name": "accessKey",
+      "label": "Access key ID",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "secretKey",
+      "label": "Secret access key",
+      "type": "string",
+      "required": true,
+      "secret": true
+    },
+    {
+      "name": "pathStyle",
+      "label": "Path-style addressing",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Required by most self-hosted S3 servers. AWS S3 uses virtual-host style."
+    }
+  ],
+  "providers": {
+    "services": ["seaweedfs", "minio"],
+    "portNames": ["s3", "swfs-s3", "http-s3"],
+    "defaultPort": 8333
+  }
+}

@@ -1,0 +1,167 @@
+package models
+
+// Connection scopes. A project connection lives in the project namespace; a
+// platform connection is cluster-wide and shared by every project.
+const (
+	ConnectionScopeProject  = "project"
+	ConnectionScopePlatform = "platform"
+)
+
+// Reasons returned by a connectivity test, so the console can tell a network
+// problem from a credential problem instead of showing a raw driver error.
+const (
+	TestReasonUnreachable   = "unreachable"
+	TestReasonAuthFailed    = "auth-failed"
+	TestReasonNotFound      = "not-found"
+	TestReasonTimeout       = "timeout"
+	TestReasonInvalidConfig = "invalid-config"
+	TestReasonUnknown       = "unknown"
+)
+
+// Field types accepted in a connection type descriptor.
+const (
+	FieldTypeString  = "string"
+	FieldTypeNumber  = "number"
+	FieldTypeBoolean = "boolean"
+	FieldTypeEnum    = "enum"
+)
+
+// ConnectionField describes a single input of a connection type.
+type ConnectionField struct {
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	Secret      bool     `json:"secret,omitempty"`
+	Default     any      `json:"default,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty"`
+	Help        string   `json:"help,omitempty"`
+	Min         *float64 `json:"min,omitempty"`
+	Max         *float64 `json:"max,omitempty"`
+}
+
+// ConnectionProviders tells how a service deployed on the platform is
+// recognized as providing this kind of connection, and which of the ports it
+// publishes carries it. Used to derive the internal connections of a project.
+type ConnectionProviders struct {
+	// Services matches the `okdp.io/service` label of a deployed Release.
+	Services []string `json:"services"`
+	// PortNames lists, in priority order, the Service port names that carry the
+	// connection. A port matching none of them is used only as a fallback.
+	PortNames []string `json:"portNames"`
+	// DefaultPort is used when no Service port could be resolved.
+	DefaultPort int32 `json:"defaultPort"`
+}
+
+// ConnectionType is the descriptor of one kind of connection. It drives the
+// form rendered by the console, the server-side validation of submitted
+// values, and the recognition of deployed services as connection providers.
+type ConnectionType struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
+	Icon        string `json:"icon"`
+	Category    string `json:"category"`
+	// External reports whether a user may declare a connection of this type by
+	// hand. Types that only ever come from a service deployed on the platform
+	// (Trino, ...) are listed for the internal view but offer no creation form.
+	External  bool                `json:"external"`
+	Fields    []ConnectionField   `json:"fields"`
+	Providers ConnectionProviders `json:"providers"`
+}
+
+// Field returns the named field of the type.
+func (t *ConnectionType) Field(name string) (*ConnectionField, bool) {
+	for i := range t.Fields {
+		if t.Fields[i].Name == name {
+			return &t.Fields[i], true
+		}
+	}
+	return nil, false
+}
+
+// SecretFields lists the fields of the type that hold credentials. Their values
+// live in a Kubernetes Secret and never in the Connection spec.
+func (t *ConnectionType) SecretFields() []string {
+	var names []string
+	for i := range t.Fields {
+		if t.Fields[i].Secret {
+			names = append(names, t.Fields[i].Name)
+		}
+	}
+	return names
+}
+
+// ConnectionCatalogResponse is the payload of GET /api/connection-types.
+type ConnectionCatalogResponse struct {
+	Types []ConnectionType `json:"types"`
+	// CRDAvailable reports whether the KuboCD connection CRDs are installed.
+	// While they are not, external connections cannot be persisted and the
+	// console says so instead of failing on save; internal connections are
+	// derived from deployed services and stay available either way.
+	CRDAvailable bool `json:"crdAvailable"`
+}
+
+// ConnectionRequest is the body for creating or updating an external connection.
+type ConnectionRequest struct {
+	Name        string         `json:"name" binding:"required"`
+	Type        string         `json:"type" binding:"required"`
+	Description string         `json:"description,omitempty"`
+	Values      map[string]any `json:"values" binding:"required"`
+}
+
+// ConnectionTestRequest is the body of a connectivity test. It carries no name:
+// a connection is tested before it is created.
+type ConnectionTestRequest struct {
+	Type   string         `json:"type" binding:"required"`
+	Values map[string]any `json:"values" binding:"required"`
+}
+
+// ConnectionTestResult is the outcome of a connectivity test.
+type ConnectionTestResult struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message"`
+	Reason     string `json:"reason,omitempty"`
+	DurationMs int64  `json:"durationMs"`
+}
+
+// ConnectionResponse is an external connection as returned by the API. The
+// values of secret fields are never included; only their names are, so that
+// the console can show a credential as set without being able to read it.
+type ConnectionResponse struct {
+	Name         string         `json:"name"`
+	Type         string         `json:"type"`
+	Scope        string         `json:"scope"`
+	Namespace    string         `json:"namespace,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	Status       string         `json:"status"`
+	Message      string         `json:"message,omitempty"`
+	Values       map[string]any `json:"values"`
+	SecretFields []string       `json:"secretFields,omitempty"`
+	CreatedAt    string         `json:"createdAt,omitempty"`
+}
+
+// InternalConnection is a connection provided by a service already deployed in
+// the project, that the project's other services can consume.
+type InternalConnection struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	TypeDisplay string `json:"typeDisplay"`
+	Icon        string `json:"icon,omitempty"`
+	Category    string `json:"category,omitempty"`
+	// Service and ReleaseName identify the deployed instance providing it.
+	Service     string `json:"service"`
+	ReleaseName string `json:"releaseName"`
+	Namespace   string `json:"namespace"`
+	Status      string `json:"status"`
+	// Endpoint is the in-cluster address another service uses to reach it.
+	Endpoint string         `json:"endpoint"`
+	Host     string         `json:"host"`
+	Port     int32          `json:"port"`
+	Values   map[string]any `json:"values"`
+	// Managed reports that the entry comes from a Connection the KuboCD release
+	// controller owns, rather than being derived from the deployed service.
+	Managed   bool   `json:"managed"`
+	CreatedAt string `json:"createdAt,omitempty"`
+}

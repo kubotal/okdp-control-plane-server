@@ -1,0 +1,60 @@
+{
+  "name": "postgresql",
+  "displayName": "PostgreSQL",
+  "description": "PostgreSQL database server.",
+  "icon": "pi pi-database",
+  "category": "database",
+  "external": true,
+  "fields": [
+    {
+      "name": "host",
+      "label": "Host",
+      "type": "string",
+      "required": true,
+      "placeholder": "postgres.example.com"
+    },
+    {
+      "name": "port",
+      "label": "Port",
+      "type": "number",
+      "required": true,
+      "default": 5432,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "name": "database",
+      "label": "Database",
+      "type": "string",
+      "required": true,
+      "placeholder": "analytics"
+    },
+    {
+      "name": "user",
+      "label": "User",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "password",
+      "label": "Password",
+      "type": "string",
+      "required": true,
+      "secret": true
+    },
+    {
+      "name": "sslMode",
+      "label": "SSL mode",
+      "type": "enum",
+      "required": true,
+      "default": "require",
+      "options": ["disable", "require", "verify-ca", "verify-full"],
+      "help": "'require' encrypts without validating the server certificate; use 'verify-full' when the server presents a certificate your cluster trusts."
+    }
+  ],
+  "providers": {
+    "services": ["postgresql", "postgres"],
+    "portNames": ["postgresql", "postgres", "tcp-postgresql"],
+    "defaultPort": 5432
+  }
+}

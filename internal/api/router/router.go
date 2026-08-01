@@ -11,7 +11,7 @@ import (
 )
 
 // SetupRouter initializes the Gin router and defines routes
-func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, identityHandler *handlers.IdentityHandler, secretStoreHandler *handlers.SecretStoreHandler, externalSecretHandler *handlers.ExternalSecretHandler, serviceHandler *handlers.ServiceHandler, sparkHandler *handlers.SparkHandler) *gin.Engine {
+func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, identityHandler *handlers.IdentityHandler, secretStoreHandler *handlers.SecretStoreHandler, externalSecretHandler *handlers.ExternalSecretHandler, serviceHandler *handlers.ServiceHandler, sparkHandler *handlers.SparkHandler, connectionHandler *handlers.ConnectionHandler) *gin.Engine {
 	r := gin.New() // Use New() to skip default logger/recovery (we add them manually)
 
 	// Middleware
@@ -74,6 +74,32 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 			externalSecrets.PUT("/:esName", externalSecretHandler.UpdateExternalSecret)
 			externalSecrets.DELETE("/:esName", externalSecretHandler.DeleteExternalSecret)
 			externalSecrets.GET("/:esName/status", externalSecretHandler.GetExternalSecretStatus)
+		}
+
+		// Connection types available for creation, and whether the KuboCD
+		// connection CRDs are installed (external connections need them).
+		api.GET("/connection-types", connectionHandler.GetConnectionTypes)
+
+		// Connections (scoped per project namespace). "internal" lists what the
+		// project's deployed services expose; the rest are user-declared.
+		connections := api.Group("/projects/:name/connections")
+		{
+			connections.GET("", connectionHandler.ListConnections)
+			connections.GET("/internal", connectionHandler.ListInternalConnections)
+			connections.POST("", connectionHandler.CreateConnection)
+			connections.POST("/test", connectionHandler.TestConnection)
+			connections.PUT("/:connName", connectionHandler.UpdateConnection)
+			connections.DELETE("/:connName", connectionHandler.DeleteConnection)
+		}
+
+		// Platform-wide connections, shared by every project (admin)
+		platformConnections := api.Group("/platform-connections")
+		{
+			platformConnections.GET("", connectionHandler.ListPlatformConnections)
+			platformConnections.POST("", connectionHandler.CreatePlatformConnection)
+			platformConnections.POST("/test", connectionHandler.TestPlatformConnection)
+			platformConnections.PUT("/:connName", connectionHandler.UpdatePlatformConnection)
+			platformConnections.DELETE("/:connName", connectionHandler.DeletePlatformConnection)
 		}
 
 		// Platform services (managed OKDP services)

@@ -52,6 +52,11 @@ func main() {
 		logrus.Fatalf("Failed to initialize typed Kubernetes client: %v", err)
 	}
 
+	k8sDiscoveryClient, err := repository.InitK8sDiscoveryClient()
+	if err != nil {
+		logrus.Fatalf("Failed to initialize Kubernetes discovery client: %v", err)
+	}
+
 	// Initialize Project stack (projects are Kubernetes Namespaces
 	// carrying the label okdp.io/project)
 	projectRepo := repository.NewProjectRepository(k8sTypedClient)
@@ -87,7 +92,17 @@ func main() {
 	sparkHandler := handlers.NewSparkHandler(sparkService)
 
 	// Setup router
-	r := router.SetupRouter(cfg, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler)
+	// Initialize Connection stack (external connections declared by users +
+	// internal ones derived from the services deployed in a project)
+	connectionCatalog, err := service.NewEmbeddedConnectionTypeCatalog()
+	if err != nil {
+		logrus.Fatalf("Failed to load the connection type catalog: %v", err)
+	}
+	connectionRepo := repository.NewConnectionRepository(k8sClient, k8sTypedClient, k8sDiscoveryClient)
+	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, connectionCatalog, cfg.PlatformNamespace)
+	connectionHandler := handlers.NewConnectionHandler(connectionService)
+
+	r := router.SetupRouter(cfg, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler, connectionHandler)
 
 	// Start Server
 	logrus.WithField("port", cfg.ServerPort).Info("Starting server")
