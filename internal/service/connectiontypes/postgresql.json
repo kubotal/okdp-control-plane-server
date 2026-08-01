@@ -48,13 +48,55 @@
       "type": "enum",
       "required": true,
       "default": "require",
-      "options": ["disable", "require", "verify-ca", "verify-full"],
+      "options": [
+        "disable",
+        "require",
+        "verify-ca",
+        "verify-full"
+      ],
       "help": "'require' encrypts without validating the server certificate; use 'verify-full' when the server presents a certificate your cluster trusts."
     }
   ],
   "providers": {
-    "services": ["postgresql", "postgres"],
-    "portNames": ["postgresql", "postgres", "tcp-postgresql"],
+    "services": [
+      "postgresql",
+      "postgres"
+    ],
+    "portNames": [
+      "postgresql",
+      "postgres",
+      "tcp-postgresql"
+    ],
     "defaultPort": 5432
+  },
+  "usage": {
+    "uri": "postgresql://{user}:${PGPASSWORD}@{host}:{port}/{database}?sslmode={sslMode}",
+    "uriLabel": "Connection URI",
+    "env": [
+      {
+        "name": "PGHOST",
+        "from": "host"
+      },
+      {
+        "name": "PGPORT",
+        "from": "port"
+      },
+      {
+        "name": "PGDATABASE",
+        "from": "database"
+      },
+      {
+        "name": "PGUSER",
+        "from": "user"
+      },
+      {
+        "name": "PGSSLMODE",
+        "from": "sslMode"
+      },
+      {
+        "name": "PGPASSWORD",
+        "secretField": "password"
+      }
+    ]
   }
 }

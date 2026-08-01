@@ -42,8 +42,40 @@
     }
   ],
   "providers": {
-    "services": ["trino"],
-    "portNames": ["http", "http-coordinator", "trino"],
+    "services": [
+      "trino"
+    ],
+    "portNames": [
+      "http",
+      "http-coordinator",
+      "trino"
+    ],
     "defaultPort": 8080
+  },
+  "usage": {
+    "uri": "jdbc:trino://{host}:{port}/{catalog}/{schema}",
+    "uriLabel": "JDBC URL",
+    "env": [
+      {
+        "name": "TRINO_HOST",
+        "from": "host"
+      },
+      {
+        "name": "TRINO_PORT",
+        "from": "port"
+      },
+      {
+        "name": "TRINO_CATALOG",
+        "from": "catalog"
+      },
+      {
+        "name": "TRINO_SCHEMA",
+        "from": "schema"
+      },
+      {
+        "name": "TRINO_USER",
+        "from": "user"
+      }
+    ]
   }
 }

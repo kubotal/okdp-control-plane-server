@@ -50,8 +50,37 @@
     }
   ],
   "providers": {
-    "services": ["seaweedfs", "minio"],
-    "portNames": ["s3", "swfs-s3", "http-s3"],
+    "services": [
+      "seaweedfs",
+      "minio"
+    ],
+    "portNames": [
+      "s3",
+      "swfs-s3",
+      "http-s3"
+    ],
     "defaultPort": 8333
+  },
+  "usage": {
+    "uri": "s3://{bucket}",
+    "uriLabel": "Bucket URI",
+    "env": [
+      {
+        "name": "AWS_ENDPOINT_URL_S3",
+        "from": "endpoint"
+      },
+      {
+        "name": "AWS_REGION",
+        "from": "region"
+      },
+      {
+        "name": "AWS_ACCESS_KEY_ID",
+        "from": "accessKey"
+      },
+      {
+        "name": "AWS_SECRET_ACCESS_KEY",
+        "secretField": "secretKey"
+      }
+    ]
   }
 }

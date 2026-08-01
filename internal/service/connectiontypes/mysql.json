@@ -47,13 +47,51 @@
       "type": "enum",
       "required": true,
       "default": "preferred",
-      "options": ["false", "preferred", "true", "skip-verify"],
+      "options": [
+        "false",
+        "preferred",
+        "true",
+        "skip-verify"
+      ],
       "help": "'preferred' uses TLS when the server offers it; 'true' requires it and validates the certificate."
     }
   ],
   "providers": {
-    "services": ["mysql", "mariadb"],
-    "portNames": ["mysql", "mariadb", "tcp-mysql"],
+    "services": [
+      "mysql",
+      "mariadb"
+    ],
+    "portNames": [
+      "mysql",
+      "mariadb",
+      "tcp-mysql"
+    ],
     "defaultPort": 3306
+  },
+  "usage": {
+    "uri": "mysql://{user}:${MYSQL_PWD}@{host}:{port}/{database}",
+    "uriLabel": "Connection URI",
+    "env": [
+      {
+        "name": "MYSQL_HOST",
+        "from": "host"
+      },
+      {
+        "name": "MYSQL_TCP_PORT",
+        "from": "port"
+      },
+      {
+        "name": "MYSQL_DATABASE",
+        "from": "database"
+      },
+      {
+        "name": "MYSQL_USER",
+        "from": "user"
+      },
+      {
+        "name": "MYSQL_PWD",
+        "secretField": "password"
+      }
+    ]
   }
 }

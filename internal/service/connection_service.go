@@ -362,6 +362,7 @@ func (s *DefaultConnectionService) deriveInternal(
 		Port:        port,
 		Values:      values,
 		Managed:     false,
+		Usage:       renderUsage(connectionType, values, nil),
 		CreatedAt:   createdAt,
 	}
 }
@@ -425,6 +426,7 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		if entry.TypeDisplay == "" {
 			entry.TypeDisplay = connectionType.DisplayName
 		}
+		entry.Usage = renderUsage(connectionType, values, nil)
 	}
 	if entry.TypeDisplay == "" {
 		entry.TypeDisplay = connection.Spec.Interface
@@ -608,6 +610,23 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 	}
 	if connectionType, known := s.catalog.Get(connectionTypeName); known {
 		response.SecretFields = connectionType.SecretFields()
+		// Read the Secret back from the annotation rather than rebuilding the
+		// name: a connection created before the convention, or edited by hand,
+		// may point somewhere else, and a consumer needs the real reference.
+		var secret *models.SecretRef
+		if ref := connection.Annotations[AnnotationCredentialsSecret]; ref != "" {
+			if ns, name, found := strings.Cut(ref, "/"); found {
+				secret = &models.SecretRef{Name: name, Namespace: ns}
+			}
+		}
+		if secret != nil && len(response.SecretFields) > 0 {
+			response.CredentialsSecret = &models.CredentialsSecretRef{
+				Name:      secret.Name,
+				Namespace: secret.Namespace,
+				Keys:      response.SecretFields,
+			}
+		}
+		response.Usage = renderUsage(connectionType, values, secret)
 	}
 	if ts := connection.CreationTimestamp; !ts.IsZero() {
 		response.CreatedAt = ts.Format(time.RFC3339)
