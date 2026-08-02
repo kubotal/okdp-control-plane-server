@@ -216,7 +216,29 @@ func TestManagedConnectionsAreNotEditable(t *testing.T) {
 	err := svc.Delete(context.Background(), "demo", "trino")
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "managed by release")
+	// The message names the service, so the reader knows what to remove if they
+	// really want the connection gone.
+	assert.Contains(t, err.Error(), "demo-trino")
+	assert.Contains(t, err.Error(), "cannot be deleted")
+	connectionRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// The controller fills status.parent only once it has reconciled, so a managed
+// connection can legitimately have none — the refusal must still read sensibly.
+func TestManagedConnectionWithoutAParentIsStillRefused(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	managed := &crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "trino", Namespace: "demo"},
+		Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "main"},
+	}
+	connectionRepo.On("Get", mock.Anything, "demo", "trino").Return(managed, nil)
+
+	err := svc.Delete(context.Background(), "demo", "trino")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "provided by a deployed service")
+	assert.NotContains(t, err.Error(), `""`)
 	connectionRepo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything, mock.Anything)
 }
 

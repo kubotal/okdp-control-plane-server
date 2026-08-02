@@ -191,7 +191,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		return nil, err
 	}
 	if existing.IsManaged() {
-		return nil, invalid("connection %q is managed by release %q and cannot be edited", name, existing.Status.Parent)
+		return nil, invalid("connection %q %s and cannot be edited", name, managedBy(existing))
 	}
 
 	public, secrets := splitValues(connectionType, req.Values)
@@ -233,7 +233,7 @@ func (s *DefaultConnectionService) Delete(ctx context.Context, namespace, name s
 		return err
 	}
 	if existing.IsManaged() {
-		return invalid("connection %q is managed by release %q and cannot be deleted", name, existing.Status.Parent)
+		return invalid("connection %q %s and cannot be deleted; it exists as long as that service does", name, managedBy(existing))
 	}
 
 	if err := s.repo.Delete(ctx, namespace, name); err != nil {
@@ -632,6 +632,17 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 		response.CreatedAt = ts.Format(time.RFC3339)
 	}
 	return response
+}
+
+// managedBy names the release a connection belongs to, for the message shown
+// when someone tries to edit or delete it. The controller fills status.parent
+// only once it has reconciled, so a connection can legitimately be managed
+// with no parent yet — saying `release ""` would read like a bug.
+func managedBy(connection *crd.Connection) string {
+	if parent := connection.Status.Parent; parent != "" {
+		return fmt.Sprintf("is provided by the deployed service %q", parent)
+	}
+	return "is provided by a deployed service"
 }
 
 // IsNotFound reports whether an error from this service is a missing resource,
