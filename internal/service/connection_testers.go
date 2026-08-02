@@ -93,6 +93,17 @@ func testPostgreSQL(ctx context.Context, values connectionValues) error {
 		config.TLSConfig = nil
 	case "verify-ca", "verify-full":
 		config.TLSConfig = &tls.Config{ServerName: config.Host, MinVersion: tls.VersionTLS12}
+	case "prefer":
+		// libpq's own default: try TLS, and connect in clear text if the server
+		// refuses it. Plenty of servers reachable from here — public datasets,
+		// older corporate instances — offer no TLS at all, and without this the
+		// only working choice would be `disable`, which never even tries.
+		config.TLSConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} // #nosec G402 -- same contract as 'require': encryption without certificate validation
+		config.Fallbacks = []*pgconn.FallbackConfig{{
+			Host:      config.Host,
+			Port:      config.Port,
+			TLSConfig: nil,
+		}}
 	default: // "require": encrypt without validating the server certificate
 		config.TLSConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} // #nosec G402 -- 'require' is defined by PostgreSQL as encryption without certificate validation
 	}

@@ -59,6 +59,36 @@ func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
 	assert.NotContains(t, s3.SecretFields(), "accessKey", "the key ID is not a credential on its own")
 }
 
+// A database outside the cluster is often reachable only in clear text —
+// public datasets, older corporate instances. Without "prefer" the only
+// working choice is "disable", which never even attempts TLS, so a server
+// that does support it would be talked to unencrypted.
+func TestPostgreSQLOffersThePreferSSLMode(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	postgres, ok := catalog.Get("postgresql")
+	if !ok {
+		t.Fatal("postgresql type missing")
+	}
+	sslMode, ok := postgres.Field("sslMode")
+	if !ok {
+		t.Fatal("sslMode field missing")
+	}
+
+	var found bool
+	for _, option := range sslMode.Options {
+		if option == "prefer" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("sslMode options = %v, want one of them to be \"prefer\"", sslMode.Options)
+	}
+	if sslMode.Default != "prefer" {
+		t.Errorf("sslMode default = %v, want prefer", sslMode.Default)
+	}
+}
+
 func TestForServiceResolvesDeployedProviders(t *testing.T) {
 	catalog := newTestCatalog(t)
 

@@ -47,14 +47,15 @@
       "label": "SSL mode",
       "type": "enum",
       "required": true,
-      "default": "require",
+      "default": "prefer",
       "options": [
-        "disable",
+        "prefer",
         "require",
         "verify-ca",
-        "verify-full"
+        "verify-full",
+        "disable"
       ],
-      "help": "'require' encrypts without validating the server certificate; use 'verify-full' when the server presents a certificate your cluster trusts."
+      "help": "'prefer' tries TLS and connects in clear text if the server refuses it — the safe default for a server you do not control. 'require' encrypts without validating the certificate; use 'verify-full' when the server presents one your cluster trusts."
     }
   ],
   "providers": {
