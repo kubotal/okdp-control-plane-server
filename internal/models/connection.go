@@ -231,3 +231,23 @@ type InternalConnection struct {
 	Usage     ConnectionUsage `json:"usage"`
 	CreatedAt string          `json:"createdAt,omitempty"`
 }
+
+// PackageInput is one connection a package declares it needs. The console
+// offers a choice for each: an existing connection, a new one, or nothing at
+// all when the package marks it optional.
+type PackageInput struct {
+	// Alias names the input in the package's templates, and is the key the
+	// console sends back when the user picks a connection.
+	Alias string `json:"alias"`
+	// Interface is the contract the chosen connection must satisfy. It is what
+	// makes the choice safe: only connections of that type are offered.
+	Interface string `json:"interface"`
+	// Parameter is the package parameter carrying the chosen connection name,
+	// derived from the input's namedConnection template. Empty when the input
+	// binds some other way, in which case the console offers no choice.
+	Parameter string `json:"parameter,omitempty"`
+	// Optional reports that the package tolerates no connection at all.
+	Optional bool `json:"optional"`
+	// Description is shown next to the field.
+	Description string `json:"description,omitempty"`
+}

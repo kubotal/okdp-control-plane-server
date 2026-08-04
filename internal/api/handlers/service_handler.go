@@ -346,6 +346,32 @@ func (h *ServiceHandler) GetServiceVersions(c *gin.Context) {
 // @Failure      404  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
 // @Router       /api/platform-services/{serviceName}/schema [get]
+// GetServiceInputs godoc
+// @Summary      Connections a service's package declares it needs
+// @Tags         platform-services
+// @Produce      json
+// @Param        serviceName path string true "Service name"
+// @Param        tag query string false "Package version tag (defaults to Context CR tag)"
+// @Success      200  {array}  models.PackageInput
+// @Router       /api/platform-services/{serviceName}/inputs [get]
+func (h *ServiceHandler) GetServiceInputs(c *gin.Context) {
+	serviceName := c.Param("serviceName")
+	tag := c.Query("tag")
+
+	inputs, err := h.schemaService.GetPackageInputs(c.Request.Context(), serviceName, tag)
+	if err != nil {
+		logrus.WithError(err).WithField("service", serviceName).Error("Failed to get service inputs")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// A package with no inputs is the normal case today; answer an empty list
+	// rather than null, so the console can iterate without a guard.
+	if inputs == nil {
+		inputs = []models.PackageInput{}
+	}
+	c.JSON(http.StatusOK, inputs)
+}
+
 func (h *ServiceHandler) GetServiceSchema(c *gin.Context) {
 	serviceName := c.Param("serviceName")
 	tag := c.Query("tag")

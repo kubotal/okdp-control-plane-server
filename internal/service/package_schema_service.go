@@ -9,12 +9,14 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/okdp/okdp-server-new/internal/models"
 	"github.com/okdp/okdp-server-new/internal/repository"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -27,6 +29,9 @@ type ServiceVersionsResponse struct {
 
 type PackageSchemaService interface {
 	GetParameterSchema(ctx context.Context, serviceName, tag string) (map[string]any, error)
+	// GetPackageInputs returns the connections a package declares it needs, so
+	// the console can offer a choice for each one at deployment time.
+	GetPackageInputs(ctx context.Context, serviceName, tag string) ([]models.PackageInput, error)
 	GetServiceVersions(ctx context.Context, serviceName string) (*ServiceVersionsResponse, error)
 	// ListPackageTags returns the tags published in the OCI registry for a service's
 	// package, even if the service is not (yet) in the catalog. repositoryOverride
@@ -41,7 +46,10 @@ type DefaultPackageSchemaService struct {
 }
 
 type schemaCacheEntry struct {
-	schema    map[string]any
+	schema map[string]any
+	// inputs is the package's declared connection inputs, read from the same
+	// dump as the schema so a package is fetched once for both.
+	inputs    []models.PackageInput
 	fetchedAt time.Time
 }
 
@@ -235,9 +243,24 @@ func fetchAnonymousToken(challenge string) (string, error) {
 }
 
 func (s *DefaultPackageSchemaService) GetParameterSchema(ctx context.Context, serviceName, tag string) (map[string]any, error) {
+	packageRepo, tag, err := s.resolvePackage(ctx, serviceName, tag)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := s.load(serviceName, tag, packageRepo)
+	if err != nil {
+		return nil, err
+	}
+	return entry.schema, nil
+}
+
+// resolvePackage turns a service name and an optional tag into the OCI
+// repository and the tag actually to fetch, defaulting the tag to the version
+// the platform catalog declares.
+func (s *DefaultPackageSchemaService) resolvePackage(ctx context.Context, serviceName, tag string) (string, string, error) {
 	services, err := s.contextRepo.GetPlatformServices(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get platform services: %w", err)
+		return "", "", fmt.Errorf("failed to get platform services: %w", err)
 	}
 
 	var svcRepository string
@@ -251,39 +274,66 @@ func (s *DefaultPackageSchemaService) GetParameterSchema(ctx context.Context, se
 		}
 	}
 	if tag == "" {
-		return nil, fmt.Errorf("service %q not found in platform services", serviceName)
+		return "", "", fmt.Errorf("service %q not found in platform services", serviceName)
 	}
 
 	packageRepo, err := s.contextRepo.GetPackageRepository(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get package repository: %w", err)
+		return "", "", fmt.Errorf("failed to get package repository: %w", err)
 	}
 	if svcRepository != "" {
 		packageRepo = svcRepository
 	}
 
+	return packageRepo, tag, nil
+}
+
+// GetPackageInputs returns the connections a package declares it needs, so the
+// console can offer a choice for each one at deployment time.
+func (s *DefaultPackageSchemaService) GetPackageInputs(ctx context.Context, serviceName, tag string) ([]models.PackageInput, error) {
+	packageRepo, tag, err := s.resolvePackage(ctx, serviceName, tag)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := s.load(serviceName, tag, packageRepo)
+	if err != nil {
+		return nil, err
+	}
+	return entry.inputs, nil
+}
+
+// load returns the cached package document, fetching it once for both the
+// parameter schema and the inputs.
+func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string) (*schemaCacheEntry, error) {
 	cacheKey := fmt.Sprintf("%s:%s", serviceName, tag)
-	if entry, ok := s.cache.Load(cacheKey); ok {
-		ce := entry.(*schemaCacheEntry)
+	if cached, ok := s.cache.Load(cacheKey); ok {
+		ce := cached.(*schemaCacheEntry)
 		if time.Since(ce.fetchedAt) < s.cacheTTL {
-			return ce.schema, nil
+			return ce, nil
 		}
 	}
 
 	ociRef := fmt.Sprintf("oci://%s/%s:%s", packageRepo, serviceName, tag)
-	schema, err := s.fetchSchemaFromOCI(ociRef)
+	doc, err := s.fetchGroomedDoc(ociRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch schema for %s: %w", ociRef, err)
 	}
 
-	enriched := parseTitleMetadata(schema)
+	schema, err := parametersOf(doc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch schema for %s: %w", ociRef, err)
+	}
 
-	s.cache.Store(cacheKey, &schemaCacheEntry{schema: enriched, fetchedAt: time.Now()})
-
-	return enriched, nil
+	entry := &schemaCacheEntry{
+		schema:    parseTitleMetadata(schema),
+		inputs:    inputsOf(doc),
+		fetchedAt: time.Now(),
+	}
+	s.cache.Store(cacheKey, entry)
+	return entry, nil
 }
 
-func (s *DefaultPackageSchemaService) fetchSchemaFromOCI(ociRef string) (map[string]any, error) {
+func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string) (map[string]any, error) {
 	tmpDir, err := os.MkdirTemp("", "kubocd-dump-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
@@ -313,17 +363,7 @@ func (s *DefaultPackageSchemaService) fetchSchemaFromOCI(ociRef string) (map[str
 		return nil, fmt.Errorf("failed to parse groomed.yaml: %w", err)
 	}
 
-	schemaSection, ok := groomedDoc["schema"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("no 'schema' section in groomed output")
-	}
-
-	parameters, ok := schemaSection["parameters"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("no 'schema.parameters' in groomed output")
-	}
-
-	return parameters, nil
+	return groomedDoc, nil
 }
 
 // parseTitleMetadata reads the `title` field from each property and expands it
@@ -430,3 +470,62 @@ func deepCopyMap(src map[string]any) map[string]any {
 	return dst
 }
 
+// parametersOf pulls the parameter schema out of a package document.
+func parametersOf(doc map[string]any) (map[string]any, error) {
+	schemaSection, ok := doc["schema"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("no 'schema' section in groomed output")
+	}
+	parameters, ok := schemaSection["parameters"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("no 'schema.parameters' in groomed output")
+	}
+	return parameters, nil
+}
+
+// namedConnectionParameter matches the template a package uses to let the user
+// pick the connection, `{{ .Parameters.<name> }}`, and yields that parameter.
+// An input bound any other way — a fixed name, a release output, an interface
+// lookup — offers the user no choice, and is reported without a parameter.
+var namedConnectionParameter = regexp.MustCompile(`^\s*{{\s*\.Parameters\.([A-Za-z_][A-Za-z0-9_]*)\s*}}\s*$`)
+
+// inputsOf reads the connections a package declares it needs. A package with
+// no inputs is the normal case today, so this never fails: it returns nothing.
+func inputsOf(doc map[string]any) []models.PackageInput {
+	raw, ok := doc["inputs"].([]any)
+	if !ok {
+		return nil
+	}
+
+	inputs := make([]models.PackageInput, 0, len(raw))
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		iface, _ := entry["interface"].(string)
+		if iface == "" {
+			continue
+		}
+
+		input := models.PackageInput{Interface: iface}
+		if alias, _ := entry["alias"].(string); alias != "" {
+			input.Alias = alias
+		} else {
+			// The package format defaults the alias to the interface name.
+			input.Alias = iface
+		}
+		input.Optional, _ = entry["optional"].(bool)
+		input.Description, _ = entry["description"].(string)
+
+		if named, ok := entry["namedConnection"].(map[string]any); ok {
+			if name, _ := named["name"].(string); name != "" {
+				if m := namedConnectionParameter.FindStringSubmatch(name); m != nil {
+					input.Parameter = m[1]
+				}
+			}
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs
+}

@@ -109,6 +109,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		api.DELETE("/platform-services/:serviceName", serviceHandler.DeletePlatformService)
 		api.GET("/platform-services/:serviceName/versions", serviceHandler.GetServiceVersions)
 		api.GET("/platform-services/:serviceName/schema", serviceHandler.GetServiceSchema)
+		api.GET("/platform-services/:serviceName/inputs", serviceHandler.GetServiceInputs)
 		api.GET("/profile-images", serviceHandler.GetProfileImages)
 
 		// Deployed services per project (KuboCD Releases)
