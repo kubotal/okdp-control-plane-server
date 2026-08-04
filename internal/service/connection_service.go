@@ -455,9 +455,10 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 	if connectionType, known := s.catalog.Get(connection.Spec.Interface); known {
 		entry.Icon = connectionType.Icon
 		entry.Category = connectionType.Category
-		if entry.TypeDisplay == "" {
-			entry.TypeDisplay = connectionType.DisplayName
-		}
+		// The catalog's display name wins over what the controller wrote in
+		// the status: KuboCD renders it as "[trino]", raw lookup markers
+		// included, which is not a label for humans.
+		entry.TypeDisplay = connectionType.DisplayName
 		entry.Usage = renderUsage(connectionType, values, nil)
 	}
 	if entry.TypeDisplay == "" {
