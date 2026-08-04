@@ -75,6 +75,14 @@ type DefaultServiceService struct {
 	releaseInterval  string
 	releaseTimeout   string
 	sidecarPrefixes  []string
+	// insecureRegistries mirrors INSECURE_OCI_REGISTRIES so the Releases this
+	// service creates carry the insecure flag for those hosts.
+	insecureRegistries []string
+}
+
+// SetInsecureRegistries declares the plain-HTTP registry hosts.
+func (s *DefaultServiceService) SetInsecureRegistries(hosts []string) {
+	s.insecureRegistries = hosts
 }
 
 func NewDefaultServiceService(releaseRepo repository.ServiceRepository, contextRepo repository.ContextRepository, contextWriteRepo repository.ContextWriterRepository, schemaService PackageSchemaService, k8sClient dynamic.Interface, typedClient kubernetes.Interface, contextNamespace, releaseInterval, releaseTimeout string, sidecarPrefixes []string) *DefaultServiceService {
@@ -317,6 +325,7 @@ func (s *DefaultServiceService) DeployService(ctx context.Context, project strin
 				Tag:        deployTag,
 				Interval:   s.releaseInterval,
 				Timeout:    s.releaseTimeout,
+				Insecure:   insecureOCIHost(packageRepo, s.insecureRegistries),
 			},
 			Parameters: req.Parameters,
 			Contexts: []crd.ContextRef{

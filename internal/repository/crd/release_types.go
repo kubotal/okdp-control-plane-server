@@ -44,6 +44,9 @@ type ReleasePackage struct {
 	Tag        string `json:"tag"`
 	Interval   string `json:"interval,omitempty"`
 	Timeout    string `json:"timeout,omitempty"`
+	// Insecure lets KuboCD fetch the package over plain HTTP; set only for
+	// registries listed in INSECURE_OCI_REGISTRIES (development sandboxes).
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 type ContextRef struct {

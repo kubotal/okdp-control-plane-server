@@ -40,9 +40,16 @@ type PackageSchemaService interface {
 }
 
 type DefaultPackageSchemaService struct {
-	contextRepo repository.ContextRepository
-	cache       sync.Map
-	cacheTTL    time.Duration
+	contextRepo        repository.ContextRepository
+	cache              sync.Map
+	cacheTTL           time.Duration
+	insecureRegistries []string
+}
+
+// SetInsecureRegistries declares the plain-HTTP registry hosts, so package
+// dumps and tag listings against them do not attempt TLS.
+func (s *DefaultPackageSchemaService) SetInsecureRegistries(hosts []string) {
+	s.insecureRegistries = hosts
 }
 
 type schemaCacheEntry struct {
@@ -119,7 +126,12 @@ func (s *DefaultPackageSchemaService) ListPackageTags(ctx context.Context, servi
 // listOCITags fetches available tags from the OCI registry for a given package.
 func (s *DefaultPackageSchemaService) listOCITags(packageRepo, serviceName string) ([]string, error) {
 	// packageRepo is like "quay.io/kubotal/packages-dev"
-	registryURL := fmt.Sprintf("https://%s/v2/%s/tags/list",
+	scheme := "https"
+	if insecureOCIHost(packageRepo, s.insecureRegistries) {
+		scheme = "http"
+	}
+	registryURL := fmt.Sprintf("%s://%s/v2/%s/tags/list",
+		scheme,
 		strings.SplitN(packageRepo, "/", 2)[0],
 		strings.SplitN(packageRepo, "/", 2)[1]+"/"+serviceName,
 	)
@@ -314,7 +326,7 @@ func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string)
 	}
 
 	ociRef := fmt.Sprintf("oci://%s/%s:%s", packageRepo, serviceName, tag)
-	doc, err := s.fetchGroomedDoc(ociRef)
+	doc, err := s.fetchGroomedDoc(ociRef, insecureOCIHost(packageRepo, s.insecureRegistries))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch schema for %s: %w", ociRef, err)
 	}
@@ -333,14 +345,18 @@ func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string)
 	return entry, nil
 }
 
-func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string) (map[string]any, error) {
+func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bool) (map[string]any, error) {
 	tmpDir, err := os.MkdirTemp("", "kubocd-dump-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cmd := exec.Command("kubocd", "dump", "package", ociRef, "--anonymous", "-o", tmpDir)
+	args := []string{"dump", "package", ociRef, "--anonymous", "-o", tmpDir}
+	if insecure {
+		args = append(args, "--insecure")
+	}
+	cmd := exec.Command("kubocd", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		logrus.WithError(err).WithField("output", string(output)).Error("kubocd dump failed")
@@ -483,11 +499,14 @@ func parametersOf(doc map[string]any) (map[string]any, error) {
 	return parameters, nil
 }
 
-// namedConnectionParameter matches the template a package uses to let the user
-// pick the connection, `{{ .Parameters.<name> }}`, and yields that parameter.
-// An input bound any other way — a fixed name, a release output, an interface
-// lookup — offers the user no choice, and is reported without a parameter.
-var namedConnectionParameter = regexp.MustCompile(`^\s*{{\s*\.Parameters\.([A-Za-z_][A-Za-z0-9_]*)\s*}}\s*$`)
+// namedConnectionParameter finds the parameter reference in the template a
+// package uses to let the user pick the connection — typically
+// `{{ .Parameters.pgConnection | default "-" }}`. Pipelines around it are the
+// norm (the default is how an optional input expresses "none"), so this
+// searches for the reference rather than matching the whole template. An input
+// bound any other way — a fixed name, a release output — has no reference and
+// offers the user no choice.
+var namedConnectionParameter = regexp.MustCompile(`\.Parameters\.([A-Za-z_][A-Za-z0-9_]*)`)
 
 // inputsOf reads the connections a package declares it needs. A package with
 // no inputs is the normal case today, so this never fails: it returns nothing.
@@ -515,7 +534,14 @@ func inputsOf(doc map[string]any) []models.PackageInput {
 			// The package format defaults the alias to the interface name.
 			input.Alias = iface
 		}
-		input.Optional, _ = entry["optional"].(bool)
+		// KcdTemplateBool fields arrive as template strings, so a literal true
+		// is the string "true", not a boolean.
+		switch v := entry["optional"].(type) {
+		case bool:
+			input.Optional = v
+		case string:
+			input.Optional = strings.EqualFold(strings.TrimSpace(v), "true")
+		}
 		input.Description, _ = entry["description"].(string)
 
 		if named, ok := entry["namedConnection"].(map[string]any); ok {

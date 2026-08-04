@@ -86,6 +86,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		{
 			connections.GET("", connectionHandler.ListConnections)
 			connections.GET("/internal", connectionHandler.ListInternalConnections)
+			connections.GET("/selectable", connectionHandler.ListSelectable)
 			connections.POST("", connectionHandler.CreateConnection)
 			connections.POST("/test", connectionHandler.TestConnection)
 			connections.PUT("/:connName", connectionHandler.UpdateConnection)

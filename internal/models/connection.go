@@ -251,3 +251,18 @@ type PackageInput struct {
 	// Description is shown next to the field.
 	Description string `json:"description,omitempty"`
 }
+
+// SelectableConnection is a connection offered when deploying a service whose
+// package declares an input — just what the picker needs to render a choice.
+// Managed connections are included: a Trino published by another release is
+// exactly the kind of thing a new service wants to bind.
+type SelectableConnection struct {
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	Type        string `json:"type"`
+	Status      string `json:"status"`
+	Description string `json:"description,omitempty"`
+	Managed     bool   `json:"managed"`
+	// ProvidedBy names the release publishing a managed connection.
+	ProvidedBy string `json:"providedBy,omitempty"`
+}

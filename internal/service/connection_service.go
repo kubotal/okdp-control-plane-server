@@ -61,6 +61,11 @@ type ConnectionService interface {
 	// ListInternal returns the connections provided by the services already
 	// deployed in a project, consumable by the project's other services.
 	ListInternal(ctx context.Context, project string) ([]models.InternalConnection, error)
+
+	// ListSelectable returns the connections a deployment form can offer for an
+	// input of the given interface: the project's own plus the platform-wide
+	// ones, managed included.
+	ListSelectable(ctx context.Context, project, iface string) ([]models.SelectableConnection, error)
 }
 
 type DefaultConnectionService struct {
@@ -704,4 +709,51 @@ func managedBy(connection *crd.Connection) string {
 // so the handler can answer 404 without importing the Kubernetes error package.
 func IsNotFound(err error) bool {
 	return apierrors.IsNotFound(err)
+}
+
+func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, iface string) ([]models.SelectableConnection, error) {
+	// Without the CRDs there is nothing to bind; the form simply offers no
+	// existing connection, which is accurate.
+	if !s.repo.Available(ctx) {
+		return []models.SelectableConnection{}, nil
+	}
+
+	result := []models.SelectableConnection{}
+	collect := func(connections []crd.Connection, scope string) {
+		for i := range connections {
+			connection := &connections[i]
+			if iface != "" && connection.Spec.Interface != iface {
+				continue
+			}
+			if connection.Spec.Disabled {
+				continue
+			}
+			result = append(result, models.SelectableConnection{
+				Name:        connection.Name,
+				Scope:       scope,
+				Type:        connection.Spec.Interface,
+				Status:      connection.Status.Phase,
+				Description: connection.Spec.Description,
+				Managed:     connection.IsManaged(),
+				ProvidedBy:  connection.Status.Parent,
+			})
+		}
+	}
+
+	projectConnections, err := s.repo.List(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	collect(projectConnections, models.ConnectionScopeProject)
+
+	// Platform-wide connections are shared by every project; a failure to list
+	// them must not hide the project's own.
+	if platformConnections, err := s.repo.List(ctx, ""); err == nil {
+		collect(platformConnections, models.ConnectionScopePlatform)
+	} else {
+		logrus.WithError(err).Warn("Failed to list platform connections; offering project ones only")
+	}
+
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result, nil
 }

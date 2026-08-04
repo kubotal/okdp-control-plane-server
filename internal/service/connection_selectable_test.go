@@ -1,0 +1,82 @@
+package service
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	"github.com/okdp/okdp-server-new/internal/repository/crd"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+func TestListSelectableOffersProjectAndPlatformOfTheInterface(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "rnacentral", Namespace: "demo"},
+			Spec:       crd.ConnectionSpec{Interface: "postgresql", Description: "public db"},
+			Status:     crd.ConnectionStatus{Phase: "READY"},
+		},
+		{
+			// Managed by a release: still selectable — that is the whole point
+			// of a published connection.
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-endpoint", Namespace: "demo"},
+			Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "endpoint"},
+			Status:     crd.ConnectionStatus{Phase: "READY", Parent: "demo-trino"},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "lake", Namespace: "demo"},
+			Spec:       crd.ConnectionSpec{Interface: "s3"},
+		},
+	}, nil)
+	connectionRepo.On("List", mock.Anything, "").Return([]crd.Connection{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "shared-pg"},
+			Spec:       crd.ConnectionSpec{Interface: "postgresql"},
+			Status:     crd.ConnectionStatus{Phase: "READY"},
+		},
+	}, nil)
+
+	selectable, err := svc.ListSelectable(context.Background(), "demo", "postgresql")
+
+	require.NoError(t, err)
+	require.Len(t, selectable, 2)
+	assert.Equal(t, "rnacentral", selectable[0].Name)
+	assert.Equal(t, "project", selectable[0].Scope)
+	assert.Equal(t, "shared-pg", selectable[1].Name)
+	assert.Equal(t, "platform", selectable[1].Scope)
+}
+
+func TestListSelectableIncludesManagedConnections(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-endpoint", Namespace: "demo"},
+			Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "endpoint"},
+			Status:     crd.ConnectionStatus{Phase: "READY", Parent: "demo-trino"},
+		},
+	}, nil)
+	connectionRepo.On("List", mock.Anything, "").Return([]crd.Connection{}, nil)
+
+	selectable, err := svc.ListSelectable(context.Background(), "demo", "trino")
+
+	require.NoError(t, err)
+	require.Len(t, selectable, 1)
+	assert.True(t, selectable[0].Managed)
+	assert.Equal(t, "demo-trino", selectable[0].ProvidedBy)
+}
+
+func TestListSelectableIsEmptyWithoutTheCRDs(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, false)
+
+	selectable, err := svc.ListSelectable(context.Background(), "demo", "postgresql")
+
+	require.NoError(t, err)
+	assert.Empty(t, selectable)
+	connectionRepo.AssertNotCalled(t, "List", mock.Anything, mock.Anything)
+}

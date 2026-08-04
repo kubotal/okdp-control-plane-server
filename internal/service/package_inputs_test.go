@@ -12,9 +12,9 @@ func TestInputsOfReadsAPackageDeclaration(t *testing.T) {
 inputs:
   - interface: s3
     namedConnection:
-      name: "{{ .Parameters.s3Connection }}"
+      name: '{{ .Parameters.s3Connection | default "-" }}'
     alias: storage
-    optional: true
+    optional: "true"
   - interface: postgresql
     namedConnection:
       name: "{{ .Parameters.pgConnection }}"

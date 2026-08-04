@@ -88,6 +88,27 @@ func (h *ConnectionHandler) list(c *gin.Context, namespace string) {
 // @Success      200  {array}   models.InternalConnection
 // @Failure      500  {object}  map[string]string
 // @Router       /api/projects/{projectId}/connections/internal [get]
+// ListSelectable godoc
+// @Summary      Connections offered for a package input of a given interface
+// @Tags         connections
+// @Produce      json
+// @Param        name path string true "Project name"
+// @Param        interface query string false "Interface the connections must satisfy"
+// @Success      200 {array} models.SelectableConnection
+// @Router       /api/projects/{name}/connections/selectable [get]
+func (h *ConnectionHandler) ListSelectable(c *gin.Context) {
+	project := c.Param("name")
+	iface := c.Query("interface")
+
+	connections, err := h.service.ListSelectable(c.Request.Context(), project, iface)
+	if err != nil {
+		logrus.WithError(err).WithField("project", project).Error("Failed to list selectable connections")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list selectable connections"})
+		return
+	}
+	c.JSON(http.StatusOK, connections)
+}
+
 func (h *ConnectionHandler) ListInternalConnections(c *gin.Context) {
 	connections, err := h.service.ListInternal(c.Request.Context(), projectNamespace(c))
 	if err != nil {

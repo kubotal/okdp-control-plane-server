@@ -83,7 +83,9 @@ func main() {
 	serviceRepo := repository.NewServiceRepository(k8sClient)
 	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace)
 	schemaService := service.NewDefaultPackageSchemaService(contextRepo)
+	schemaService.SetInsecureRegistries(cfg.InsecureOCIRegistries)
 	serviceService := service.NewDefaultServiceService(serviceRepo, contextRepo, contextWriterRepo, schemaService, k8sClient, k8sTypedClient, cfg.ContextNamespace, cfg.ReleaseInterval, cfg.ReleaseTimeout, cfg.ExcludedSidecarPrefixes)
+	serviceService.SetInsecureRegistries(cfg.InsecureOCIRegistries)
 	serviceHandler := handlers.NewServiceHandler(serviceService, schemaService)
 
 	// Initialize Spark stack (SparkApplication CRUD)
