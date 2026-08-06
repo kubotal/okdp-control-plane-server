@@ -336,9 +336,11 @@ func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string)
 		return nil, fmt.Errorf("failed to fetch schema for %s: %w", ociRef, err)
 	}
 
+	// connectionRef parameters and the hand-written stanza coexist (an alias
+	// collision is a groom-time error upstream), so both sources are offered.
 	entry := &schemaCacheEntry{
 		schema:    parseTitleMetadata(schema),
-		inputs:    inputsOf(doc),
+		inputs:    append(inputsFromMarkers(doc), inputsOf(doc)...),
 		fetchedAt: time.Now(),
 	}
 	s.cache.Store(cacheKey, entry)
@@ -553,5 +555,67 @@ func inputsOf(doc map[string]any) []models.PackageInput {
 		}
 		inputs = append(inputs, input)
 	}
+	return inputs
+}
+
+// inputsFromMarkers reads the connection inputs a package declares through
+// connectionRef parameters. The groom desugars those into plain string nodes
+// carrying an `x-kubocd-connection-ref` marker, so this is the declarative
+// successor of the hand-written inputs stanza: the parameter IS the input,
+// no template to reverse-engineer.
+//
+// Only top-level parameters are reported: a ref nested in an array generates
+// one input per element, which no deployment form can offer a static choice
+// for. connectionSelector markers are skipped for the same reason the picker
+// would skip them — the package queries by labels, the user provides nothing.
+func inputsFromMarkers(doc map[string]any) []models.PackageInput {
+	schemaSection, ok := doc["schema"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	parameters, ok := schemaSection["parameters"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	properties, ok := parameters["properties"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	// For a connectionRef the required flag lives in the PARENT's required
+	// array, not in the marker.
+	required := map[string]bool{}
+	if list, ok := parameters["required"].([]any); ok {
+		for _, item := range list {
+			if name, ok := item.(string); ok {
+				required[name] = true
+			}
+		}
+	}
+
+	var inputs []models.PackageInput
+	for name, raw := range properties {
+		property, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		marker, ok := property["x-kubocd-connection-ref"].(map[string]any)
+		if !ok {
+			continue
+		}
+		iface, _ := marker["interface"].(string)
+		if iface == "" {
+			continue
+		}
+		description, _ := property["description"].(string)
+		inputs = append(inputs, models.PackageInput{
+			Alias:       name,
+			Interface:   iface,
+			Parameter:   name,
+			Optional:    !required[name],
+			Description: description,
+		})
+	}
+	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Parameter < inputs[j].Parameter })
 	return inputs
 }
