@@ -33,7 +33,7 @@ func newServiceUnderTest(t *testing.T, crdAvailable bool) (*DefaultConnectionSer
 func postgresRequest() models.ConnectionRequest {
 	return models.ConnectionRequest{
 		Name:        "warehouse",
-		Type:        "postgresql",
+		Type:        "database-server",
 		Description: "Corporate warehouse",
 		Values: map[string]any{
 			"engine":   "postgresql",
@@ -99,8 +99,8 @@ func TestCreateStoresCredentialsInASecretAndNotInTheSpec(t *testing.T) {
 	require.NotNil(t, stored)
 	assert.NotContains(t, stored.Spec.Values, "password", "the password must never be written to the CRD")
 	assert.Equal(t, "db.example.com", stored.Spec.Values["host"])
-	// The contract, not the entry form: the postgresql type declares the
-	// database-server Interface, which is what a package's connectionRef asks for.
+	// The type name is the contract: a package asking for database-server finds
+	// this connection by that name.
 	assert.Equal(t, "database-server", stored.Spec.Interface)
 	assert.Equal(t, "warehouse-credentials", stored.Spec.Values["secretRef"],
 		"a consumer reads the Secret name from spec.values, it cannot see annotations")
@@ -287,7 +287,7 @@ func TestListExcludesManagedConnections(t *testing.T) {
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "warehouse"},
-			Spec:       crd.ConnectionSpec{Interface: "postgresql"},
+			Spec:       crd.ConnectionSpec{Interface: "database-server"},
 		},
 		{
 			// Owned by a release: it belongs to the internal view.
@@ -452,7 +452,7 @@ func TestTestRejectsBadInputBeforeDialing(t *testing.T) {
 		},
 		{
 			name:    "missing required value",
-			request: models.ConnectionTestRequest{Type: "postgresql", Values: map[string]any{"host": "db"}},
+			request: models.ConnectionTestRequest{Type: "database-server", Values: map[string]any{"host": "db"}},
 			reason:  models.TestReasonInvalidConfig,
 		},
 		{
@@ -479,7 +479,7 @@ func TestTestReportsAnUnreachableHost(t *testing.T) {
 	svc, _, _ := newServiceUnderTest(t, false)
 
 	result := svc.Test(context.Background(), models.ConnectionTestRequest{
-		Type: "postgresql",
+		Type: "database-server",
 		Values: map[string]any{
 			// Reserved by RFC 6761 to never resolve.
 			"engine":   "postgresql",
@@ -495,6 +495,23 @@ func TestTestReportsAnUnreachableHost(t *testing.T) {
 
 	assert.False(t, result.Success)
 	assert.Contains(t, []string{models.TestReasonUnreachable, models.TestReasonTimeout}, result.Reason)
+}
+
+// One type, one form, two drivers: the probe reads the engine field. An engine
+// the server has no driver for must say so rather than fall back to a default,
+// which would report a MySQL server unreachable on the PostgreSQL port. The
+// catalog's enum stops this at the door, so the guard is tested directly.
+func TestDatabaseProbeRejectsAnUnknownEngine(t *testing.T) {
+	err := testDatabaseServer(context.Background(), connectionValues{
+		"engine": "oracle",
+		"host":   "db.example.com",
+		"port":   float64(1521),
+	})
+
+	var failed *testFailure
+	require.ErrorAs(t, err, &failed)
+	assert.Equal(t, models.TestReasonInvalidConfig, failed.reason)
+	assert.Contains(t, failed.message, "oracle")
 }
 
 // findCall returns the first recorded call to method, or nil.

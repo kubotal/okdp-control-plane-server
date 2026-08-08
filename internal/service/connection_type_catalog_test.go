@@ -22,10 +22,9 @@ func TestEmbeddedCatalogLoadsBuiltInTypes(t *testing.T) {
 		names[ct.Name] = true
 	}
 
-	// The three types the console offers for creation, plus Trino which is
+	// The two types the console offers for creation, plus Trino which is
 	// only ever discovered from a deployed service.
-	assert.True(t, names["postgresql"])
-	assert.True(t, names["mysql"])
+	assert.True(t, names["database-server"])
 	assert.True(t, names["s3"])
 	assert.True(t, names["trino"])
 }
@@ -33,9 +32,9 @@ func TestEmbeddedCatalogLoadsBuiltInTypes(t *testing.T) {
 func TestExternalFlagMatchesCreationSupport(t *testing.T) {
 	catalog := newTestCatalog(t)
 
-	postgres, ok := catalog.Get("postgresql")
+	database, ok := catalog.Get("database-server")
 	require.True(t, ok)
-	assert.True(t, postgres.External, "PostgreSQL is declarable by hand")
+	assert.True(t, database.External, "a database server is declarable by hand")
 
 	trino, ok := catalog.Get("trino")
 	require.True(t, ok)
@@ -47,7 +46,7 @@ func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
 
 	// A credential that is not marked secret would be written to the Connection
 	// spec in clear, so assert the marking rather than trusting the JSON.
-	for _, name := range []string{"postgresql", "mysql"} {
+	for _, name := range []string{"database-server"} {
 		ct, ok := catalog.Get(name)
 		require.True(t, ok, name)
 		assert.Contains(t, ct.SecretFields(), "password", name)
@@ -69,11 +68,11 @@ func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
 func TestPostgreSQLOffersThePreferSSLMode(t *testing.T) {
 	catalog := newTestCatalog(t)
 
-	postgres, ok := catalog.Get("postgresql")
+	database, ok := catalog.Get("database-server")
 	if !ok {
-		t.Fatal("postgresql type missing")
+		t.Fatal("database-server type missing")
 	}
-	sslMode, ok := postgres.Field("sslMode")
+	sslMode, ok := database.Field("sslMode")
 	if !ok {
 		t.Fatal("sslMode field missing")
 	}
@@ -111,7 +110,7 @@ func TestForServiceResolvesDeployedProviders(t *testing.T) {
 func TestValidateAcceptsAWellFormedPayload(t *testing.T) {
 	catalog := newTestCatalog(t)
 
-	err := catalog.Validate("postgresql", map[string]any{
+	err := catalog.Validate("database-server", map[string]any{
 		"engine":   "postgresql",
 		"driver":   "org.postgresql.Driver",
 		"host":     "db.example.com",
@@ -169,7 +168,7 @@ func TestValidateRejectsBadPayloads(t *testing.T) {
 		{
 			name:    "value outside the enum",
 			mutate:  func(v map[string]any) { v["sslMode"] = "maybe" },
-			message: "SSL mode must be one of",
+			message: "TLS mode must be one of",
 		},
 		{
 			name:    "unknown field",
@@ -183,7 +182,7 @@ func TestValidateRejectsBadPayloads(t *testing.T) {
 			values := base()
 			tt.mutate(values)
 
-			err := catalog.Validate("postgresql", values)
+			err := catalog.Validate("database-server", values)
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.message)
@@ -209,6 +208,57 @@ func TestValidateAllowsOmittingOptionalFields(t *testing.T) {
 		"bucket":    "warehouse",
 		"accessKey": "AKIA",
 		"secretKey": "secret",
+	})
+
+	assert.NoError(t, err)
+}
+
+// The driver class and the engine cannot be allowed to disagree: a connection
+// declaring MySQL with the PostgreSQL driver opens for nobody, and the user has
+// no way of telling which of the two fields was the wrong one.
+func TestNormalizeDerivesTheDriverFromTheEngine(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	values := catalog.Normalize("database-server", map[string]any{
+		"engine": "mysql",
+		"driver": "org.postgresql.Driver",
+		"host":   "db.example.com",
+	})
+
+	assert.Equal(t, "com.mysql.cj.jdbc.Driver", values["driver"])
+}
+
+// PostgreSQL and MySQL name their TLS modes differently, and the form offers
+// whichever belongs to the chosen engine. A value for the other one is a
+// leftover from switching engines, not a setting: it must not be stored, and
+// must not be demanded either.
+func TestNormalizeDropsTheFieldsTheEngineRulesOut(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	values := catalog.Normalize("database-server", map[string]any{
+		"engine":  "mysql",
+		"host":    "db.example.com",
+		"sslMode": "prefer",
+		"tls":     "preferred",
+	})
+
+	_, hasSSLMode := values["sslMode"]
+	assert.False(t, hasSSLMode, "the PostgreSQL wording has no place on a MySQL connection")
+	assert.Equal(t, "preferred", values["tls"])
+}
+
+func TestValidateIgnoresAFieldTheEngineRulesOut(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	err := catalog.Validate("database-server", map[string]any{
+		"engine":   "mysql",
+		"driver":   "com.mysql.cj.jdbc.Driver",
+		"host":     "db.example.com",
+		"port":     float64(3306),
+		"dbName":   "analytics",
+		"username": "reader",
+		"password": "s3cret",
+		"tls":      "preferred",
 	})
 
 	assert.NoError(t, err)

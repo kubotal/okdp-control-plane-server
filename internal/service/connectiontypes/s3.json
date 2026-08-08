@@ -54,7 +54,8 @@
       "label": "Secret access key",
       "type": "string",
       "required": true,
-      "secret": true
+      "secret": true,
+      "masked": true
     },
     {
       "name": "pathStyle",
@@ -98,6 +99,5 @@
         "secretField": "secretKey"
       }
     ]
-  },
-  "interface": "s3"
+  }
 }

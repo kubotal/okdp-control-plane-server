@@ -146,12 +146,12 @@ func (s *DefaultConnectionService) List(ctx context.Context, namespace string) (
 }
 
 func (s *DefaultConnectionService) Create(ctx context.Context, namespace string, req models.ConnectionRequest) (*models.ConnectionResponse, error) {
-	connectionType, err := s.validateRequest(ctx, req, false)
+	connectionType, values, err := s.validateRequest(ctx, req, false)
 	if err != nil {
 		return nil, err
 	}
 
-	public, secrets := splitValues(connectionType, req.Values)
+	public, secrets := splitValues(connectionType, values)
 	secretNamespace := s.credentialsNamespace(namespace)
 	secretName := req.Name + credentialsSecretSuffix
 
@@ -168,14 +168,13 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 			Name:      req.Name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				crd.LabelConnectionType: req.Type,
-				crd.LabelManagedBy:      crd.ManagedByValue,
+				crd.LabelManagedBy: crd.ManagedByValue,
 			},
 		},
 		Spec: crd.ConnectionSpec{
-			// The contract, not the entry form: PostgreSQL and MySQL both declare
-			// the database-server Interface, and a package asks for that one.
-			Interface:   connectionType.InterfaceName(),
+			// The type name IS the contract: a package asking for database-server
+			// finds it by that name, here and in the catalog.
+			Interface:   connectionType.Name,
 			Description: req.Description,
 			Values:      public,
 		},
@@ -202,7 +201,7 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 
 func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name string, req models.ConnectionRequest) (*models.ConnectionResponse, error) {
 	req.Name = name
-	connectionType, err := s.validateRequest(ctx, req, true)
+	connectionType, values, err := s.validateRequest(ctx, req, true)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +214,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		return nil, invalid("connection %q %s and cannot be edited", name, managedBy(existing))
 	}
 
-	public, secrets := splitValues(connectionType, req.Values)
+	public, secrets := splitValues(connectionType, values)
 	secretNamespace := s.credentialsNamespace(namespace)
 	secretName := name + credentialsSecretSuffix
 
@@ -238,13 +237,9 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		}
 	}
 
-	existing.Spec.Interface = connectionType.InterfaceName()
+	existing.Spec.Interface = connectionType.Name
 	existing.Spec.Description = req.Description
 	existing.Spec.Values = public
-	if existing.Labels == nil {
-		existing.Labels = map[string]string{}
-	}
-	existing.Labels[crd.LabelConnectionType] = req.Type
 
 	if err := s.repo.Update(ctx, namespace, existing); err != nil {
 		return nil, err
@@ -555,31 +550,34 @@ func pickPort(ports []corev1.ServicePort, providers models.ConnectionProviders) 
 
 // --- helpers ---
 
-// validateRequest checks a submitted connection. On an edit, credentials that
-// were not resubmitted are kept as they are rather than reported as missing.
-func (s *DefaultConnectionService) validateRequest(ctx context.Context, req models.ConnectionRequest, isUpdate bool) (*models.ConnectionType, error) {
+// validateRequest checks a submitted connection and returns the values as they
+// should be stored: derived fields filled, fields put out of play by the
+// submitted engine dropped. On an edit, credentials that were not resubmitted
+// are kept as they are rather than reported as missing.
+func (s *DefaultConnectionService) validateRequest(ctx context.Context, req models.ConnectionRequest, isUpdate bool) (*models.ConnectionType, map[string]any, error) {
 	if !s.repo.Available(ctx) {
-		return nil, ErrConnectionsUnavailable
+		return nil, nil, ErrConnectionsUnavailable
 	}
 	if errs := validation.IsDNS1123Subdomain(req.Name); len(errs) > 0 {
-		return nil, invalid("invalid connection name %q: %s", req.Name, errs[0])
+		return nil, nil, invalid("invalid connection name %q: %s", req.Name, errs[0])
 	}
 
 	connectionType, known := s.catalog.Get(req.Type)
 	if !known {
-		return nil, invalid("unknown connection type %q", req.Type)
+		return nil, nil, invalid("unknown connection type %q", req.Type)
 	}
 	if !connectionType.External {
-		return nil, invalid("connections of type %q come from a deployed service and cannot be declared by hand", req.Type)
+		return nil, nil, invalid("connections of type %q come from a deployed service and cannot be declared by hand", req.Type)
 	}
+	values := s.catalog.Normalize(req.Type, req.Values)
 	validateValues := s.catalog.Validate
 	if isUpdate {
 		validateValues = s.catalog.ValidateUpdate
 	}
-	if err := validateValues(req.Type, req.Values); err != nil {
-		return nil, invalid("%s", err.Error())
+	if err := validateValues(req.Type, values); err != nil {
+		return nil, nil, invalid("%s", err.Error())
 	}
-	return connectionType, nil
+	return connectionType, values, nil
 }
 
 // credentialsNamespace returns where the Secret of a connection lives. Platform
@@ -620,10 +618,10 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 		scope = models.ConnectionScopePlatform
 	}
 
+	// The type name is the interface name: one type, one contract. The label
+	// that used to carry the type separately is gone, and reading it would only
+	// resurrect the names of types that no longer exist.
 	connectionTypeName := connection.Spec.Interface
-	if labelled, ok := connection.Labels[crd.LabelConnectionType]; ok && labelled != "" {
-		connectionTypeName = labelled
-	}
 
 	values := connection.Spec.Values
 	if values == nil {

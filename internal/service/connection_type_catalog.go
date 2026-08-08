@@ -37,6 +37,10 @@ type ConnectionTypeCatalog interface {
 	// credential that has not changed, so a missing secret field is a value
 	// left as it is, not an omission.
 	ValidateUpdate(typeName string, values map[string]any) error
+	// Normalize fills the derived fields and drops the ones the submitted
+	// values put out of play, so that validation and storage see a coherent
+	// set. Called before Validate, on both create and update.
+	Normalize(typeName string, values map[string]any) map[string]any
 }
 
 type embeddedCatalog struct {
@@ -154,6 +158,38 @@ func (c *embeddedCatalog) ValidateUpdate(typeName string, values map[string]any)
 	return c.validate(typeName, values, false)
 }
 
+// Normalize returns a copy of values with the derived fields computed and the
+// fields whose condition is not met removed. A MySQL connection carrying a
+// PostgreSQL sslMode, or a driver contradicting its engine, cannot be opened by
+// anything; neither should be storable.
+func (c *embeddedCatalog) Normalize(typeName string, values map[string]any) map[string]any {
+	ct, ok := c.Get(typeName)
+	if !ok {
+		return values
+	}
+
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+
+	for i := range ct.Fields {
+		f := &ct.Fields[i]
+		if !f.Applies(out) {
+			delete(out, f.Name)
+			continue
+		}
+		if f.Derived == nil {
+			continue
+		}
+		source, _ := out[f.Derived.From].(string)
+		if derived, known := f.Derived.Map[source]; known {
+			out[f.Name] = derived
+		}
+	}
+	return out
+}
+
 func (c *embeddedCatalog) validate(typeName string, values map[string]any, requireSecrets bool) error {
 	ct, ok := c.Get(typeName)
 	if !ok {
@@ -168,6 +204,11 @@ func (c *embeddedCatalog) validate(typeName string, values map[string]any, requi
 
 	for i := range ct.Fields {
 		f := &ct.Fields[i]
+		// A field the submitted values put out of play is neither required nor
+		// checked: a MySQL connection is not missing a PostgreSQL TLS mode.
+		if !f.Applies(values) {
+			continue
+		}
 		value, present := values[f.Name]
 		if !present || value == nil || value == "" {
 			if f.Required && (requireSecrets || !f.Secret) {

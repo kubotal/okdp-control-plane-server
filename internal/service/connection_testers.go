@@ -46,9 +46,21 @@ type connectionTester func(ctx context.Context, values connectionValues) error
 // connectionTesters holds the probe of each type that has one. A type absent
 // from the map is reported as not testable rather than silently passing.
 var connectionTesters = map[string]connectionTester{
-	"postgresql": testPostgreSQL,
-	"mysql":      testMySQL,
-	"s3":         testS3,
+	"database-server": testDatabaseServer,
+	"s3":              testS3,
+}
+
+// testDatabaseServer picks the driver from the engine field. One type means one
+// contract, so the entry form is shared and only the probe differs.
+func testDatabaseServer(ctx context.Context, values connectionValues) error {
+	switch engine := values.String("engine"); engine {
+	case "postgresql":
+		return testPostgreSQL(ctx, values)
+	case "mysql":
+		return testMySQL(ctx, values)
+	default:
+		return failure(models.TestReasonInvalidConfig, "Unknown database engine %q", engine)
+	}
 }
 
 // connectionValues reads submitted values, which arrive as decoded JSON.

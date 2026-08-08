@@ -35,3 +35,5 @@ CLAUDE.md
 .claude/
 .cursor/
 .agent/
+# Local kubocd CLI copied into the dev image build context (see Dockerfile.dev).
+kubocd-local

@@ -18,7 +18,7 @@ func TestListSelectableOffersProjectAndPlatformOfTheInterface(t *testing.T) {
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "rnacentral", Namespace: "demo"},
-			Spec:       crd.ConnectionSpec{Interface: "postgresql", Description: "public db"},
+			Spec:       crd.ConnectionSpec{Interface: "database-server", Description: "public db"},
 			Status:     crd.ConnectionStatus{Phase: "READY"},
 		},
 		{
@@ -36,12 +36,12 @@ func TestListSelectableOffersProjectAndPlatformOfTheInterface(t *testing.T) {
 	connectionRepo.On("List", mock.Anything, "").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "shared-pg"},
-			Spec:       crd.ConnectionSpec{Interface: "postgresql"},
+			Spec:       crd.ConnectionSpec{Interface: "database-server"},
 			Status:     crd.ConnectionStatus{Phase: "READY"},
 		},
 	}, nil)
 
-	selectable, err := svc.ListSelectable(context.Background(), "demo", "postgresql")
+	selectable, err := svc.ListSelectable(context.Background(), "demo", "database-server")
 
 	require.NoError(t, err)
 	require.Len(t, selectable, 2)
@@ -74,7 +74,7 @@ func TestListSelectableIncludesManagedConnections(t *testing.T) {
 func TestListSelectableIsEmptyWithoutTheCRDs(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, false)
 
-	selectable, err := svc.ListSelectable(context.Background(), "demo", "postgresql")
+	selectable, err := svc.ListSelectable(context.Background(), "demo", "database-server")
 
 	require.NoError(t, err)
 	assert.Empty(t, selectable)

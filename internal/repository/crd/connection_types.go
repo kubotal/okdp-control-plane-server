@@ -14,10 +14,6 @@ const (
 	ConnectionKind        = "Connection"
 	ClusterConnectionKind = "ClusterConnection"
 
-	// LabelConnectionType records the connection type a Connection was created
-	// from, so the console can render it without re-deriving it from the
-	// interface name.
-	LabelConnectionType = "okdp.io/connection-type"
 	// LabelManagedBy marks the Connections this server owns.
 	LabelManagedBy = "app.kubernetes.io/managed-by"
 	// ManagedByValue is the value of LabelManagedBy for resources we create.

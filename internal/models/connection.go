@@ -28,17 +28,53 @@ const (
 
 // ConnectionField describes a single input of a connection type.
 type ConnectionField struct {
-	Name        string   `json:"name"`
-	Label       string   `json:"label"`
-	Type        string   `json:"type"`
-	Required    bool     `json:"required"`
-	Secret      bool     `json:"secret,omitempty"`
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Type     string `json:"type"`
+	Required bool   `json:"required"`
+	// Secret says where the value is stored: in the credentials Secret rather
+	// than in the Connection spec. It says nothing about how it is typed in.
+	Secret bool `json:"secret,omitempty"`
+	// Masked hides the value as it is typed. A database user name lives in the
+	// Secret because the contract puts it there, but hiding it behind dots only
+	// stops the user from checking what they typed.
+	Masked      bool     `json:"masked,omitempty"`
 	Default     any      `json:"default,omitempty"`
 	Options     []string `json:"options,omitempty"`
 	Placeholder string   `json:"placeholder,omitempty"`
 	Help        string   `json:"help,omitempty"`
 	Min         *float64 `json:"min,omitempty"`
 	Max         *float64 `json:"max,omitempty"`
+	// ShowWhen limits the field to one value of another field. A PostgreSQL TLS
+	// mode and a MySQL one are not the same list, and offering both at once is
+	// how a connection ends up carrying the wrong one.
+	ShowWhen *FieldCondition `json:"showWhen,omitempty"`
+	// Derived computes the value from another field instead of asking for it.
+	// The JDBC driver follows from the engine, and a form that lets the two
+	// disagree only produces connections nothing can open.
+	Derived *FieldDerivation `json:"derived,omitempty"`
+}
+
+// FieldCondition is "that other field equals this value".
+type FieldCondition struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
+// FieldDerivation computes a field from another one through a lookup table.
+type FieldDerivation struct {
+	From string            `json:"from"`
+	Map  map[string]string `json:"map"`
+}
+
+// Applies reports whether the field is in play for the given values. A field
+// whose condition is not met is neither asked for nor validated.
+func (f *ConnectionField) Applies(values map[string]any) bool {
+	if f.ShowWhen == nil {
+		return true
+	}
+	current, _ := values[f.ShowWhen.Field].(string)
+	return current == f.ShowWhen.Value
 }
 
 // ConnectionProviders tells how a service deployed on the platform is
@@ -83,13 +119,10 @@ type ConnectionEnvSpec struct {
 // values, the recognition of deployed services as connection providers, and
 // the ready-to-use snippets shown when a connection is opened.
 type ConnectionType struct {
-	Name string `json:"name"`
-	// Interface names the KuboCD Interface this type produces, which is the
-	// contract of record and what a package's connectionRef asks for. Several
-	// types may produce the same one: PostgreSQL and MySQL are two entry forms,
-	// with their own defaults, ports and service discovery, for the single
-	// database-server contract. Empty means the type name is the interface name.
-	Interface   string `json:"interface,omitempty"`
+	// Name IS the KuboCD Interface this type produces. One type, one contract,
+	// deliberately: an entry form that produced a differently named contract
+	// would mean nothing a package asks for could be found by its own name.
+	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
@@ -271,13 +304,4 @@ type SelectableConnection struct {
 	Managed     bool   `json:"managed"`
 	// ProvidedBy names the release publishing a managed connection.
 	ProvidedBy string `json:"providedBy,omitempty"`
-}
-
-// InterfaceName is the KuboCD Interface a connection of this type declares, that
-// is what lands in spec.interface and what a package's connectionRef matches.
-func (t ConnectionType) InterfaceName() string {
-	if t.Interface != "" {
-		return t.Interface
-	}
-	return t.Name
 }
