@@ -56,7 +56,10 @@ func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
 	s3, ok := catalog.Get("s3")
 	require.True(t, ok)
 	assert.Contains(t, s3.SecretFields(), "secretKey")
-	assert.NotContains(t, s3.SecretFields(), "accessKey", "the key ID is not a credential on its own")
+	// Both halves of an S3 identity go to the Secret. Not because a key ID is a
+	// secret on its own, it is not, but because the s3 Interface declares a Secret
+	// "with keys: accessKey, secretKey" and consuming packages read both from it.
+	assert.Contains(t, s3.SecretFields(), "accessKey", "the s3 contract expects the key ID in the Secret")
 }
 
 // A database outside the cluster is often reachable only in clear text —
@@ -202,7 +205,7 @@ func TestValidateAllowsOmittingOptionalFields(t *testing.T) {
 
 	// region and pathStyle carry defaults and must not be demanded.
 	err := catalog.Validate("s3", map[string]any{
-		"endpoint":  "https://s3.example.com",
+		"apiUrl":    "https://s3.example.com",
 		"bucket":    "warehouse",
 		"accessKey": "AKIA",
 		"secretKey": "secret",

@@ -192,7 +192,7 @@ func classifyMySQLError(ctx context.Context, err error) error {
 // --- S3-compatible object storage ---
 
 func testS3(ctx context.Context, values connectionValues) error {
-	endpoint := values.String("endpoint")
+	endpoint := values.String("apiUrl")
 	host, secure, err := parseS3Endpoint(endpoint)
 	if err != nil {
 		return err
