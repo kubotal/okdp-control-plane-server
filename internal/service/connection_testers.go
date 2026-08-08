@@ -89,15 +89,19 @@ func (v connectionValues) Bool(name string, fallback bool) bool {
 
 // --- PostgreSQL ---
 
-func testPostgreSQL(ctx context.Context, values connectionValues) error {
+// postgresConfig builds the driver settings from a connection's values. Kept
+// apart from the probe so the field names it reads can be checked against the
+// descriptor without a live server: the two went out of step once, and a probe
+// reading a field nobody writes reports a wrong password instead of saying so.
+func postgresConfig(values connectionValues) (*pgx.ConnConfig, error) {
 	config, err := pgx.ParseConfig("")
 	if err != nil {
-		return failure(models.TestReasonInvalidConfig, "Could not build the connection settings: %v", err)
+		return nil, failure(models.TestReasonInvalidConfig, "Could not build the connection settings: %v", err)
 	}
 	config.Host = values.String("host")
 	config.Port = uint16(values.Int("port", 5432))
-	config.Database = values.String("database")
-	config.User = values.String("user")
+	config.Database = values.String("dbName")
+	config.User = values.String("username")
 	config.Password = values.String("password")
 
 	switch values.String("sslMode") {
@@ -118,6 +122,15 @@ func testPostgreSQL(ctx context.Context, values connectionValues) error {
 		}}
 	default: // "require": encrypt without validating the server certificate
 		config.TLSConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} // #nosec G402 -- 'require' is defined by PostgreSQL as encryption without certificate validation
+	}
+
+	return config, nil
+}
+
+func testPostgreSQL(ctx context.Context, values connectionValues) error {
+	config, err := postgresConfig(values)
+	if err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
@@ -151,12 +164,15 @@ func classifyPostgresError(ctx context.Context, err error) error {
 
 // --- MySQL / MariaDB ---
 
-func testMySQL(ctx context.Context, values connectionValues) error {
+// mysqlConfig builds the driver settings from a connection's values, split out
+// for the same reason as postgresConfig: the field names it reads are part of
+// its contract with the descriptor, and must be testable without a server.
+func mysqlConfig(values connectionValues) (*mysqldriver.Config, error) {
 	config := mysqldriver.NewConfig()
 	config.Net = "tcp"
 	config.Addr = net.JoinHostPort(values.String("host"), fmt.Sprint(values.Int("port", 3306)))
-	config.DBName = values.String("database")
-	config.User = values.String("user")
+	config.DBName = values.String("dbName")
+	config.User = values.String("username")
 	config.Passwd = values.String("password")
 	config.Timeout = testTimeout
 	config.ReadTimeout = testTimeout
@@ -169,7 +185,16 @@ func testMySQL(ctx context.Context, values connectionValues) error {
 	case "preferred", "true", "skip-verify":
 		config.TLSConfig = tlsMode
 	default:
-		return failure(models.TestReasonInvalidConfig, "Unsupported TLS mode %q.", tlsMode)
+		return nil, failure(models.TestReasonInvalidConfig, "Unsupported TLS mode %q.", tlsMode)
+	}
+
+	return config, nil
+}
+
+func testMySQL(ctx context.Context, values connectionValues) error {
+	config, err := mysqlConfig(values)
+	if err != nil {
+		return err
 	}
 
 	db, err := sql.Open("mysql", config.FormatDSN())

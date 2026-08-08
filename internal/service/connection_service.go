@@ -289,7 +289,12 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 	if _, known := s.catalog.Get(req.Type); !known {
 		return result(false, models.TestReasonInvalidConfig, fmt.Sprintf("Unknown connection type %q.", req.Type))
 	}
-	if err := s.catalog.Validate(req.Type, req.Values); err != nil {
+	// Normalize first, exactly as Create and Update do: the form does not send a
+	// derived field, so validating the raw payload would demand a JDBC driver
+	// nobody was asked for. Testing the normalized values is also the point of
+	// the button, which is to try what will actually be stored.
+	values := s.catalog.Normalize(req.Type, req.Values)
+	if err := s.catalog.Validate(req.Type, values); err != nil {
 		return result(false, models.TestReasonInvalidConfig, err.Error())
 	}
 
@@ -298,7 +303,7 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 		return result(false, models.TestReasonInvalidConfig, "This connection type cannot be tested.")
 	}
 
-	if err := tester(ctx, req.Values); err != nil {
+	if err := tester(ctx, values); err != nil {
 		var testErr *testFailure
 		if errors.As(err, &testErr) {
 			return result(false, testErr.reason, testErr.message)

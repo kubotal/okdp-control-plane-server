@@ -523,3 +523,30 @@ func findCall(m *mocks.ConnectionRepository, method string) *mock.Call {
 	}
 	return nil
 }
+
+// The form does not send a derived field, so the button must test the values as
+// they will be stored, not the raw payload. Validating before normalizing asked
+// for a JDBC driver nobody was offered, and every test came back "JDBC driver is
+// required" without a packet ever leaving the server.
+func TestTestNormalizesBeforeValidating(t *testing.T) {
+	svc, _, _ := newServiceUnderTest(t, false)
+
+	result := svc.Test(context.Background(), models.ConnectionTestRequest{
+		Type: "database-server",
+		Values: map[string]any{
+			"engine": "postgresql",
+			// Reserved by RFC 6761 to never resolve, so the probe fails on the
+			// network rather than on the payload.
+			"host":     "nothing.invalid",
+			"port":     float64(5432),
+			"dbName":   "analytics",
+			"username": "reader",
+			"password": "s3cret",
+			"sslMode":  "disable",
+		},
+	})
+
+	assert.False(t, result.Success)
+	assert.NotEqual(t, models.TestReasonInvalidConfig, result.Reason,
+		"the payload is complete once normalized, the failure must come from the network")
+}
