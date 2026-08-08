@@ -567,3 +567,73 @@ func TestCreateRefusesASecretThatCannotWork(t *testing.T) {
 		})
 	}
 }
+
+// --- Consumers ---
+
+// Deleting a connection takes its Secret with it, and the pods mounting that
+// Secret fail at their next restart with CreateContainerConfigError, far from
+// the dialog that caused it. The controller publishes who consumes what, so the
+// console can say it beforehand instead of guessing from parameters.
+func TestListConsumersReadsWhatTheControllerPublished(t *testing.T) {
+	svc, _, releaseRepo := newServiceUnderTest(t, true)
+
+	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-hms"},
+			Status: crd.ReleaseStatus{
+				Phase: "READY",
+				EffectiveInputConnections: []crd.InputConnectionReference{
+					{Kind: "Connection", Name: "demo-db", Namespace: "demo"},
+				},
+			},
+		},
+		{
+			// Waiting for the same connection: it counts as a consumer, but it
+			// never resolved it.
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-superset"},
+			Status: crd.ReleaseStatus{
+				Phase: "WAIT_ICNX",
+				WatchedInputConnections: []crd.InputConnectionReference{
+					{Kind: "Connection", Name: "demo-db", Namespace: "demo"},
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino"},
+			Status:     crd.ReleaseStatus{Phase: "READY"},
+		},
+	}, nil)
+
+	consumers, err := svc.ListConsumers(context.Background(), "demo", "demo-db")
+
+	require.NoError(t, err)
+	require.Len(t, consumers, 2)
+	assert.Equal(t, "hms", consumers[0].Service, "the instance name, as the console shows it")
+	assert.True(t, consumers[0].Effective)
+	assert.Equal(t, "superset", consumers[1].Service)
+	assert.False(t, consumers[1].Effective, "waiting for a connection is not running on it")
+}
+
+// A ClusterConnection has no namespace of its own, so a reference to one comes
+// back with an empty namespace and must still match.
+func TestListConsumersMatchesAPlatformConnection(t *testing.T) {
+	svc, _, releaseRepo := newServiceUnderTest(t, true)
+
+	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo-superset"},
+			Status: crd.ReleaseStatus{
+				Phase: "READY",
+				EffectiveInputConnections: []crd.InputConnectionReference{
+					{Kind: "ClusterConnection", Name: "shared-warehouse"},
+				},
+			},
+		},
+	}, nil)
+
+	consumers, err := svc.ListConsumers(context.Background(), "demo", "shared-warehouse")
+
+	require.NoError(t, err)
+	require.Len(t, consumers, 1)
+	assert.Equal(t, "superset", consumers[0].Service)
+}

@@ -31,12 +31,12 @@ type Release struct {
 }
 
 type ReleaseSpec struct {
-	Description     string            `json:"description,omitempty"`
-	Package         ReleasePackage    `json:"package"`
-	Parameters      map[string]any    `json:"parameters,omitempty"`
-	Contexts        []ContextRef      `json:"contexts,omitempty"`
-	TargetNamespace string            `json:"targetNamespace"`
-	CreateNamespace bool              `json:"createNamespace"`
+	Description     string         `json:"description,omitempty"`
+	Package         ReleasePackage `json:"package"`
+	Parameters      map[string]any `json:"parameters,omitempty"`
+	Contexts        []ContextRef   `json:"contexts,omitempty"`
+	TargetNamespace string         `json:"targetNamespace"`
+	CreateNamespace bool           `json:"createNamespace"`
 }
 
 type ReleasePackage struct {
@@ -58,6 +58,20 @@ type ReleaseStatus struct {
 	Phase      string             `json:"phase,omitempty"`
 	Roles      []string           `json:"roles,omitempty"`
 	Conditions []ReleaseCondition `json:"conditions,omitempty"`
+	// WatchedInputConnections lists the connections this release depends on,
+	// whether or not they resolved. EffectiveInputConnections lists the ones it
+	// actually got. The controller writes both; without them the console can
+	// only show what a service asked for, never what it is running against.
+	WatchedInputConnections   []InputConnectionReference `json:"watchedInputConnections,omitempty"`
+	EffectiveInputConnections []InputConnectionReference `json:"effectiveInputConnections,omitempty"`
+}
+
+// InputConnectionReference identifies one connection a release consumes. The
+// kind matters: a Connection and a ClusterConnection may share a name.
+type InputConnectionReference struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 type ReleaseCondition struct {

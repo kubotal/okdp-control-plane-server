@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -984,8 +985,56 @@ func releaseToInstance(r *crd.Release) *models.ServiceInstance {
 		TargetNamespace: r.Spec.TargetNamespace,
 		Roles:           r.Status.Roles,
 		Parameters:      r.Spec.Parameters,
+		Connections:     boundConnections(r),
 		CreatedAt:       createdAt,
 	}
+}
+
+// boundConnections describes what a release is wired to, from what the
+// controller published.
+//
+// The two lists do not mean what their names suggest. A connectionRef with no
+// kind resolves by looking on both sides, so watchedInputConnections holds
+// every *candidate*, a Connection and a ClusterConnection per name, not a set
+// of pending bindings. Listing them as they come showed "demo-db
+// (ClusterConnection) waiting" next to the Connection that had resolved, for a
+// ClusterConnection that never existed. Candidates are therefore grouped by
+// name: a name that resolved shows once, resolved; a name that resolved nowhere
+// shows once, waiting, which is the case a reader opens this page for.
+func boundConnections(r *crd.Release) []models.ServiceConnection {
+	byName := map[string]models.ServiceConnection{}
+	order := make([]string, 0, len(r.Status.WatchedInputConnections))
+
+	remember := func(ref crd.InputConnectionReference, resolved bool) {
+		current, seen := byName[ref.Name]
+		if !seen {
+			order = append(order, ref.Name)
+		}
+		// A resolved candidate always wins over a pending one.
+		if seen && current.Resolved {
+			return
+		}
+		byName[ref.Name] = models.ServiceConnection{
+			Name: ref.Name, Namespace: ref.Namespace, Kind: ref.Kind, Resolved: resolved,
+		}
+	}
+
+	for _, ref := range r.Status.EffectiveInputConnections {
+		remember(ref, true)
+	}
+	for _, ref := range r.Status.WatchedInputConnections {
+		remember(ref, false)
+	}
+
+	if len(order) == 0 {
+		return nil
+	}
+	sort.Strings(order)
+	out := make([]models.ServiceConnection, 0, len(order))
+	for _, name := range order {
+		out = append(out, byName[name])
+	}
+	return out
 }
 
 // GetServiceMetrics aggregates live CPU/memory usage from the metrics-server

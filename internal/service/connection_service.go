@@ -65,6 +65,10 @@ type ConnectionService interface {
 	// input of the given interface: the project's own plus the platform-wide
 	// ones, managed included.
 	ListSelectable(ctx context.Context, project, iface string) ([]models.SelectableConnection, error)
+
+	// ListConsumers returns the services of a project bound to a connection,
+	// read from what the release controller published rather than guessed.
+	ListConsumers(ctx context.Context, project, name string) ([]models.ConnectionConsumer, error)
 }
 
 type DefaultConnectionService struct {
@@ -660,4 +664,44 @@ func withCredentialsSecret(annotations map[string]string, reference string) map[
 	}
 	annotations[AnnotationCredentialsSecret] = reference
 	return annotations
+}
+
+// ListConsumers returns the services bound to a connection. The controller
+// publishes both what a release watches and what it actually resolved, so this
+// reads that rather than reparsing parameters and guessing.
+func (s *DefaultConnectionService) ListConsumers(ctx context.Context, project, name string) ([]models.ConnectionConsumer, error) {
+	releases, err := s.releaseRepo.List(ctx, project, project)
+	if err != nil {
+		return nil, err
+	}
+
+	consumers := make([]models.ConnectionConsumer, 0)
+	for i := range releases {
+		release := &releases[i]
+		watched := referencesConnection(release.Status.WatchedInputConnections, project, name)
+		effective := referencesConnection(release.Status.EffectiveInputConnections, project, name)
+		if !watched && !effective {
+			continue
+		}
+		consumers = append(consumers, models.ConnectionConsumer{
+			Service:     strings.TrimPrefix(release.Name, project+"-"),
+			ReleaseName: release.Name,
+			Status:      release.Status.Phase,
+			Effective:   effective,
+		})
+	}
+	sort.Slice(consumers, func(i, j int) bool { return consumers[i].ReleaseName < consumers[j].ReleaseName })
+	return consumers, nil
+}
+
+// referencesConnection reports whether one of the references points at the named
+// connection of a project. A ClusterConnection carries no namespace of its own,
+// so an empty namespace matches too: it is the platform-wide one of that name.
+func referencesConnection(refs []crd.InputConnectionReference, project, name string) bool {
+	for _, ref := range refs {
+		if ref.Name == name && (ref.Namespace == project || ref.Namespace == "") {
+			return true
+		}
+	}
+	return false
 }

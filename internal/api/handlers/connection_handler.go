@@ -109,6 +109,27 @@ func (h *ConnectionHandler) ListSelectable(c *gin.Context) {
 	c.JSON(http.StatusOK, connections)
 }
 
+// ListConsumers godoc
+// @Summary      Services of the project bound to a connection
+// @Tags         connections
+// @Produce      json
+// @Param        name path string true "Project name"
+// @Param        connName path string true "Connection name"
+// @Success      200 {array} models.ConnectionConsumer
+// @Router       /api/projects/{name}/connections/{connName}/consumers [get]
+func (h *ConnectionHandler) ListConsumers(c *gin.Context) {
+	project := c.Param("name")
+	name := c.Param("connName")
+
+	consumers, err := h.service.ListConsumers(c.Request.Context(), project, name)
+	if err != nil {
+		logrus.WithError(err).WithField("connection", name).Error("Failed to list the consumers of a connection")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list the consumers of this connection"})
+		return
+	}
+	c.JSON(http.StatusOK, consumers)
+}
+
 func (h *ConnectionHandler) ListInternalConnections(c *gin.Context) {
 	connections, err := h.service.ListInternal(c.Request.Context(), projectNamespace(c))
 	if err != nil {

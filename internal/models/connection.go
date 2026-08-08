@@ -247,3 +247,18 @@ type SelectableConnection struct {
 	// ProvidedBy names the release publishing a managed connection.
 	ProvidedBy string `json:"providedBy,omitempty"`
 }
+
+// ConnectionConsumer is one service bound to a connection. The console shows
+// these before a destructive edit: deleting a connection takes its Secret with
+// it, and the pods mounting that Secret fail at their next restart with
+// CreateContainerConfigError, far from the dialog that caused it.
+type ConnectionConsumer struct {
+	// Service is the instance name as the console displays it, ReleaseName the
+	// underlying KuboCD Release.
+	Service     string `json:"service"`
+	ReleaseName string `json:"releaseName"`
+	Status      string `json:"status"`
+	// Effective reports that the release actually resolved this connection, as
+	// opposed to merely waiting for it.
+	Effective bool `json:"effective"`
+}
