@@ -347,6 +347,10 @@ func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string)
 	return entry, nil
 }
 
+// dumpTimeout bounds one `kubocd dump package`, which pulls an OCI artifact.
+// Generous on purpose: a cold registry over a slow link is not a failure.
+const dumpTimeout = 60 * time.Second
+
 func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bool) (map[string]any, error) {
 	tmpDir, err := os.MkdirTemp("", "kubocd-dump-*")
 	if err != nil {
@@ -358,8 +362,19 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 	if insecure {
 		args = append(args, "--insecure")
 	}
-	cmd := exec.Command("kubocd", args...)
+
+	// A budget, because this reaches a registry over the network. Without one, a
+	// registry that accepts the connection and never answers pins the request,
+	// and with it the goroutine serving it, for as long as the process lives.
+	ctx, cancel := context.WithTimeout(context.Background(), dumpTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "kubocd", args...)
 	output, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		logrus.WithField("ref", ociRef).WithField("timeout", dumpTimeout).Error("kubocd dump timed out")
+		return nil, fmt.Errorf("kubocd dump timed out after %s for %s, the registry did not answer", dumpTimeout, ociRef)
+	}
 	if err != nil {
 		logrus.WithError(err).WithField("output", string(output)).Error("kubocd dump failed")
 		return nil, fmt.Errorf("kubocd dump failed: %s", string(output))
