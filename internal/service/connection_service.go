@@ -393,7 +393,6 @@ func (s *DefaultConnectionService) deriveInternal(
 		Port:        port,
 		Values:      values,
 		Managed:     false,
-		Usage:       renderUsage(connectionType, values, nil),
 		CreatedAt:   createdAt,
 	}
 }
@@ -458,7 +457,6 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		// the status: KuboCD renders it as "[trino]", raw lookup markers
 		// included, which is not a label for humans.
 		entry.TypeDisplay = connectionType.DisplayName
-		entry.Usage = renderUsage(connectionType, values, nil)
 	}
 	if entry.TypeDisplay == "" {
 		entry.TypeDisplay = connection.Spec.Interface
@@ -648,20 +646,15 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 		// Read the Secret back from the annotation rather than rebuilding the
 		// name: a connection created before the convention, or edited by hand,
 		// may point somewhere else, and a consumer needs the real reference.
-		var secret *models.SecretRef
-		if ref := connection.Annotations[AnnotationCredentialsSecret]; ref != "" {
+		if ref := connection.Annotations[AnnotationCredentialsSecret]; ref != "" && len(response.SecretFields) > 0 {
 			if ns, name, found := strings.Cut(ref, "/"); found {
-				secret = &models.SecretRef{Name: name, Namespace: ns}
+				response.CredentialsSecret = &models.CredentialsSecretRef{
+					Name:      name,
+					Namespace: ns,
+					Keys:      response.SecretFields,
+				}
 			}
 		}
-		if secret != nil && len(response.SecretFields) > 0 {
-			response.CredentialsSecret = &models.CredentialsSecretRef{
-				Name:      secret.Name,
-				Namespace: secret.Namespace,
-				Keys:      response.SecretFields,
-			}
-		}
-		response.Usage = renderUsage(connectionType, values, secret)
 	}
 	if ts := connection.CreationTimestamp; !ts.IsZero() {
 		response.CreatedAt = ts.Format(time.RFC3339)

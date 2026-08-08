@@ -90,30 +90,6 @@ type ConnectionProviders struct {
 	DefaultPort int32 `json:"defaultPort"`
 }
 
-// ConnectionUsageSpec describes, in the type descriptor, how a connection of
-// this kind is consumed. The server renders it against a connection's values;
-// the console only displays the result, so the formats live in one place.
-type ConnectionUsageSpec struct {
-	// URI is a template of the paste-ready connection string. `{field}` is
-	// replaced by that field's value. Anything else — notably `${VAR}` shell
-	// expansions standing in for a credential — is left verbatim, so a password
-	// is never interpolated into a string the console displays.
-	URI string `json:"uri,omitempty"`
-	// URILabel names the string for the reader ("JDBC URL", "Connection URI").
-	URILabel string `json:"uriLabel,omitempty"`
-	// Env lists the environment variables the usual clients of this type read.
-	Env []ConnectionEnvSpec `json:"env,omitempty"`
-}
-
-// ConnectionEnvSpec is one environment variable of a type's usage. Exactly one
-// of From or SecretField is set: From names a plain value field, SecretField a
-// credential that resolves to a Secret reference rather than to a value.
-type ConnectionEnvSpec struct {
-	Name        string `json:"name"`
-	From        string `json:"from,omitempty"`
-	SecretField string `json:"secretField,omitempty"`
-}
-
 // ConnectionType is the descriptor of one kind of connection. It drives the
 // form rendered by the console, the server-side validation of submitted
 // values, the recognition of deployed services as connection providers, and
@@ -133,7 +109,6 @@ type ConnectionType struct {
 	External  bool                `json:"external"`
 	Fields    []ConnectionField   `json:"fields"`
 	Providers ConnectionProviders `json:"providers"`
-	Usage     ConnectionUsageSpec `json:"usage"`
 }
 
 // Field returns the named field of the type.
@@ -191,37 +166,12 @@ type ConnectionTestResult struct {
 	DurationMs int64  `json:"durationMs"`
 }
 
-// SecretRef points at the key of a Kubernetes Secret holding one credential —
-// what a consumer needs to mount it, never the value itself.
-type SecretRef struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-	Key       string `json:"key"`
-}
-
 // CredentialsSecretRef is the Secret holding a connection's credentials, with
 // the keys it carries. It names no single key — a connection may hold several.
 type CredentialsSecretRef struct {
 	Name      string   `json:"name"`
 	Namespace string   `json:"namespace,omitempty"`
 	Keys      []string `json:"keys,omitempty"`
-}
-
-// ConnectionEnvVar is one rendered environment variable. Value carries a plain
-// value; SecretRef points at the Secret key instead, for a credential.
-type ConnectionEnvVar struct {
-	Name      string     `json:"name"`
-	Value     string     `json:"value,omitempty"`
-	SecretRef *SecretRef `json:"secretRef,omitempty"`
-}
-
-// ConnectionUsage is what a consumer needs to actually use a connection: the
-// paste-ready string and the environment variables its usual clients read.
-// Credentials appear only as Secret references.
-type ConnectionUsage struct {
-	URI      string             `json:"uri,omitempty"`
-	URILabel string             `json:"uriLabel,omitempty"`
-	Env      []ConnectionEnvVar `json:"env,omitempty"`
 }
 
 // ConnectionResponse is an external connection as returned by the API. The
@@ -240,7 +190,6 @@ type ConnectionResponse struct {
 	// CredentialsSecret is the Secret holding the secret fields, so a consumer
 	// can reference it from a Deployment without the console ever reading it.
 	CredentialsSecret *CredentialsSecretRef `json:"credentialsSecret,omitempty"`
-	Usage             ConnectionUsage       `json:"usage"`
 	CreatedAt         string                `json:"createdAt,omitempty"`
 }
 
@@ -264,11 +213,8 @@ type InternalConnection struct {
 	Values   map[string]any `json:"values"`
 	// Managed reports that the entry comes from a Connection the KuboCD release
 	// controller owns, rather than being derived from the deployed service.
-	Managed bool `json:"managed"`
-	// Usage is rendered the same way as for an external connection, minus the
-	// credentials: an internal connection carries none.
-	Usage     ConnectionUsage `json:"usage"`
-	CreatedAt string          `json:"createdAt,omitempty"`
+	Managed   bool   `json:"managed"`
+	CreatedAt string `json:"createdAt,omitempty"`
 }
 
 // PackageInput is one connection a package declares it needs. The console

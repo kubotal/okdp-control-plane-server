@@ -125,35 +125,5 @@
       "tcp-mysql"
     ],
     "defaultPort": 5432
-  },
-  "usage": {
-    "uri": "{engine}://${DB_USER}:${DB_PASSWORD}@{host}:{port}/{dbName}",
-    "uriLabel": "Connection URI",
-    "env": [
-      {
-        "name": "DB_ENGINE",
-        "from": "engine"
-      },
-      {
-        "name": "DB_HOST",
-        "from": "host"
-      },
-      {
-        "name": "DB_PORT",
-        "from": "port"
-      },
-      {
-        "name": "DB_NAME",
-        "from": "dbName"
-      },
-      {
-        "name": "DB_USER",
-        "secretField": "username"
-      },
-      {
-        "name": "DB_PASSWORD",
-        "secretField": "password"
-      }
-    ]
   }
 }
