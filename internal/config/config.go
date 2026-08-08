@@ -14,6 +14,11 @@ type Config struct {
 	KuboCDNamespace        string
 	ContextName            string
 	ContextNamespace       string
+	// The platform Context, the one package templates also read. Empty means it
+	// is the same object as the Control Plane one, which is what a deployment
+	// that has not split them yet looks like.
+	PlatformContextName      string
+	PlatformContextNamespace string
 	ReleaseInterval        string
 	ReleaseTimeout         string
 	ExcludedSidecarPrefixes []string
@@ -34,6 +39,8 @@ func Load() (*Config, error) {
 		KuboCDNamespace:   getEnv("KUBOCD_NAMESPACE", "kubocd-system"),
 		ContextName:       getEnv("CONTEXT_NAME", "default"),
 		ContextNamespace:  getEnv("CONTEXT_NAMESPACE", "kubocd-system"),
+		PlatformContextName:      getEnv("PLATFORM_CONTEXT_NAME", ""),
+		PlatformContextNamespace: getEnv("PLATFORM_CONTEXT_NAMESPACE", "kubocd-system"),
 		ReleaseInterval:   getEnv("RELEASE_INTERVAL", "30m"),
 		ReleaseTimeout:    getEnv("RELEASE_TIMEOUT", "10m"),
 	}

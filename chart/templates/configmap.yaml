@@ -10,6 +10,8 @@ data:
   KUBOCD_NAMESPACE: {{ .Values.configuration.kubocdNamespace | quote }}
   CONTEXT_NAME: {{ .Values.configuration.contextName | quote }}
   CONTEXT_NAMESPACE: {{ .Values.configuration.contextNamespace | quote }}
+  PLATFORM_CONTEXT_NAME: {{ .Values.configuration.platformContextName | quote }}
+  PLATFORM_CONTEXT_NAMESPACE: {{ .Values.configuration.platformContextNamespace | quote }}
   ALLOWED_ORIGINS: {{ .Values.configuration.allowedOrigins | quote }}
   LOG_LEVEL: {{ .Values.configuration.logLevel | quote }}
   RELEASE_INTERVAL: {{ .Values.configuration.releaseInterval | quote }}

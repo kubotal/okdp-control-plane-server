@@ -10,8 +10,15 @@ image:
 configuration:
   platformNamespace: okdp-system
   kubocdNamespace: kubocd-system
+  # Context of the Control Plane itself: service catalog, portal categories,
+  # package repository. No Release references it.
   contextName: default
   contextNamespace: kubocd-system
+  # Context of the platform, the one package templates also read (ingress
+  # suffix, storage classes, issuers). Empty means it is the same object as
+  # above, for a deployment that has not split them yet.
+  platformContextName: ""
+  platformContextNamespace: kubocd-system
   # Single origin, set verbatim in the Access-Control-Allow-Origin header.
   allowedOrigins: https://console.okdp.dev-sandbox
   logLevel: info

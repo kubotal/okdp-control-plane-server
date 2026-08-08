@@ -81,7 +81,7 @@ func main() {
 
 	// Initialize Service stack (KuboCD Releases + Context-driven catalog)
 	serviceRepo := repository.NewServiceRepository(k8sClient)
-	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace)
+	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace, cfg.PlatformContextName, cfg.PlatformContextNamespace)
 	schemaService := service.NewDefaultPackageSchemaService(contextRepo)
 	schemaService.SetInsecureRegistries(cfg.InsecureOCIRegistries)
 	serviceService := service.NewDefaultServiceService(serviceRepo, contextRepo, contextWriterRepo, schemaService, k8sClient, k8sTypedClient, cfg.ContextNamespace, cfg.ReleaseInterval, cfg.ReleaseTimeout, cfg.ExcludedSidecarPrefixes)

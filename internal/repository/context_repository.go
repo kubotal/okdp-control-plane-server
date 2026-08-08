@@ -43,17 +43,38 @@ type ContextRepository interface {
 	GetSparkConfig(ctx context.Context) (*models.SparkConfig, error)
 }
 
+// k8sContextRepository reads two Contexts, because they hold two different
+// kinds of configuration.
+//
+// The Control Plane Context holds what only the console reads: the service
+// catalog, the categories of the portal, the package repository. No Release
+// references it, so editing the catalog reconciles nothing.
+//
+// The platform Context holds what a package template reads: the ingress suffix,
+// the storage classes, the certificate issuers. Every Release merges it, so it
+// changes rarely and a change is expensive.
+//
+// The server reads from both. It consumes platform data, it does not own it.
 type k8sContextRepository struct {
-	client    dynamic.Interface
-	name      string
-	namespace string
+	client            dynamic.Interface
+	name              string
+	namespace         string
+	platformName      string
+	platformNamespace string
 }
 
-func NewContextRepository(client dynamic.Interface, name, namespace string) ContextRepository {
+func NewContextRepository(client dynamic.Interface, name, namespace, platformName, platformNamespace string) ContextRepository {
+	// An empty platform name means both live in the same object, which is what
+	// a deployment that has not split them yet looks like.
+	if platformName == "" {
+		platformName, platformNamespace = name, namespace
+	}
 	return &k8sContextRepository{
-		client:    client,
-		name:      name,
-		namespace: namespace,
+		client:            client,
+		name:              name,
+		namespace:         namespace,
+		platformName:      platformName,
+		platformNamespace: platformNamespace,
 	}
 }
 
@@ -164,7 +185,7 @@ func (r *k8sContextRepository) GetPackageRepository(ctx context.Context) (string
 }
 
 func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, error) {
-	u, err := r.getContext(ctx)
+	u, err := r.getPlatformContext(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +197,7 @@ func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, er
 }
 
 func (r *k8sContextRepository) GetKubauthNamespace(ctx context.Context) (string, error) {
-	u, err := r.getContext(ctx)
+	u, err := r.getPlatformContext(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -188,7 +209,7 @@ func (r *k8sContextRepository) GetKubauthNamespace(ctx context.Context) (string,
 }
 
 func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string][]models.ProfileImage, error) {
-	u, err := r.getContext(ctx)
+	u, err := r.getPlatformContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +242,7 @@ func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string
 }
 
 func (r *k8sContextRepository) GetSparkConfig(ctx context.Context) (*models.SparkConfig, error) {
-	u, err := r.getContext(ctx)
+	u, err := r.getPlatformContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +303,15 @@ func (r *k8sContextRepository) GetSparkConfig(ctx context.Context) (*models.Spar
 	return cfg, nil
 }
 
+// getContext reads the Control Plane's own Context.
 func (r *k8sContextRepository) getContext(ctx context.Context) (*unstructured.Unstructured, error) {
 	return r.client.Resource(contextGVR).Namespace(r.namespace).Get(ctx, r.name, metav1.GetOptions{})
+}
+
+// getPlatformContext reads the platform Context, the one package templates also
+// read. Everything under spec.context.okdp stays out of it.
+func (r *k8sContextRepository) getPlatformContext(ctx context.Context) (*unstructured.Unstructured, error) {
+	return r.client.Resource(contextGVR).Namespace(r.platformNamespace).Get(ctx, r.platformName, metav1.GetOptions{})
 }
 
 func getString(m map[string]interface{}, key string) string {
