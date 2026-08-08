@@ -77,19 +77,6 @@ func (f *ConnectionField) Applies(values map[string]any) bool {
 	return current == f.ShowWhen.Value
 }
 
-// ConnectionProviders tells how a service deployed on the platform is
-// recognized as providing this kind of connection, and which of the ports it
-// publishes carries it. Used to derive the internal connections of a project.
-type ConnectionProviders struct {
-	// Services matches the `okdp.io/service` label of a deployed Release.
-	Services []string `json:"services"`
-	// PortNames lists, in priority order, the Service port names that carry the
-	// connection. A port matching none of them is used only as a fallback.
-	PortNames []string `json:"portNames"`
-	// DefaultPort is used when no Service port could be resolved.
-	DefaultPort int32 `json:"defaultPort"`
-}
-
 // ConnectionType is the descriptor of one kind of connection. It drives the
 // form rendered by the console, the server-side validation of submitted
 // values, the recognition of deployed services as connection providers, and
@@ -106,9 +93,12 @@ type ConnectionType struct {
 	// External reports whether a user may declare a connection of this type by
 	// hand. Types that only ever come from a service deployed on the platform
 	// (Trino, ...) are listed for the internal view but offer no creation form.
-	External  bool                `json:"external"`
-	Fields    []ConnectionField   `json:"fields"`
-	Providers ConnectionProviders `json:"providers"`
+	External bool              `json:"external"`
+	Fields   []ConnectionField `json:"fields"`
+	// EndpointFrom names the value fields carrying the address a consumer would
+	// reach, most specific first. A contract publishing a plain host and port
+	// needs none: that convention is the fallback.
+	EndpointFrom []string `json:"endpointFrom,omitempty"`
 }
 
 // Field returns the named field of the type.

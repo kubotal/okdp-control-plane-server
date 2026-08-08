@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/okdp/okdp-server-new/internal/models"
@@ -215,9 +214,12 @@ func TestCreateRejectsInvalidInput(t *testing.T) {
 			message: `unknown connection type "oracle"`,
 		},
 		{
-			name:    "type that only comes from a deployed service",
+			// Every field is checked against the descriptor of the submitted
+			// type, so a payload built for another contract is refused rather
+			// than half-stored.
+			name:    "values belonging to another contract",
 			mutate:  func(r *models.ConnectionRequest) { r.Type = "trino" },
-			message: "cannot be declared by hand",
+			message: `for connection type "trino"`,
 		},
 		{
 			name:    "value rejected by the schema",
@@ -305,134 +307,76 @@ func TestListExcludesManagedConnections(t *testing.T) {
 
 // --- Internal connections ---
 
-func trinoRelease() crd.Release {
-	return crd.Release{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "demo-trino",
-			Labels: map[string]string{crd.LabelService: "trino"},
-		},
-		Status: crd.ReleaseStatus{Phase: "READY"},
-	}
-}
+// The tab lists what the project's services actually publish, and only that.
+// It used to add entries the server fabricated by matching a release label
+// against a hardcoded list and guessing an address from the Kubernetes Service
+// whose name looked closest. Nothing could bind those entries, since the picker
+// only offers real Connections, yet they looked exactly like the real ones.
+func TestListInternalOnlyListsPublishedConnections(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
-func jupyterRelease() crd.Release {
-	return crd.Release{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "demo-jupyterhub",
-			Labels: map[string]string{crd.LabelService: "jupyterhub"},
-		},
-		Status: crd.ReleaseStatus{Phase: "READY"},
-	}
-}
-
-func kubeService(name string, ports ...corev1.ServicePort) corev1.Service {
-	return corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "demo"},
-		Spec:       corev1.ServiceSpec{ClusterIP: "10.0.0.1", Ports: ports},
-	}
-}
-
-func TestListInternalKeepsOnlyServicesThatProvideAConnection(t *testing.T) {
-	svc, connectionRepo, releaseRepo := newServiceUnderTest(t, false)
-
-	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{
-		trinoRelease(),
-		jupyterRelease(), // a notebook exposes no connection to other services
-	}, nil)
-	connectionRepo.On("ListKubeServices", mock.Anything, "demo").Return([]corev1.Service{
-		kubeService("demo-trino", corev1.ServicePort{Name: "http", Port: 8080}),
-	}, nil)
-
-	connections, err := svc.ListInternal(context.Background(), "demo")
-
-	require.NoError(t, err)
-	require.Len(t, connections, 1)
-	assert.Equal(t, "demo-trino", connections[0].Name)
-	assert.Equal(t, "trino", connections[0].Type)
-	assert.Equal(t, "Trino", connections[0].TypeDisplay)
-	assert.Equal(t, "Ready", connections[0].Status)
-	assert.False(t, connections[0].Managed)
-}
-
-func TestListInternalResolvesTheEndpointFromTheKubernetesService(t *testing.T) {
-	svc, connectionRepo, releaseRepo := newServiceUnderTest(t, false)
-
-	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{trinoRelease()}, nil)
-	connectionRepo.On("ListKubeServices", mock.Anything, "demo").Return([]corev1.Service{
-		// The worker Service must not win over the coordinator one.
-		kubeService("demo-trino-worker", corev1.ServicePort{Name: "http", Port: 8080}),
-		kubeService("demo-trino", corev1.ServicePort{Name: "metrics", Port: 9090}, corev1.ServicePort{Name: "http", Port: 8080}),
-	}, nil)
-
-	connections, err := svc.ListInternal(context.Background(), "demo")
-
-	require.NoError(t, err)
-	require.Len(t, connections, 1)
-	assert.Equal(t, "demo-trino.demo.svc.cluster.local", connections[0].Host)
-	assert.Equal(t, int32(8080), connections[0].Port, "the port named by the type wins over the first one")
-	assert.Equal(t, "demo-trino.demo.svc.cluster.local:8080", connections[0].Endpoint)
-	assert.Equal(t, "demo-trino.demo.svc.cluster.local", connections[0].Values["host"])
-}
-
-func TestListInternalReportsNoEndpointRatherThanGuessingOne(t *testing.T) {
-	svc, connectionRepo, releaseRepo := newServiceUnderTest(t, false)
-
-	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{trinoRelease()}, nil)
-	// Nothing in the namespace backs the release yet (still installing).
-	connectionRepo.On("ListKubeServices", mock.Anything, "demo").Return([]corev1.Service{}, nil)
-
-	connections, err := svc.ListInternal(context.Background(), "demo")
-
-	require.NoError(t, err)
-	require.Len(t, connections, 1)
-	assert.Empty(t, connections[0].Endpoint, "an address that would not resolve must not be shown")
-	assert.Empty(t, connections[0].Host)
-}
-
-func TestListInternalIgnoresHeadlessServices(t *testing.T) {
-	svc, connectionRepo, releaseRepo := newServiceUnderTest(t, false)
-
-	headless := kubeService("demo-trino", corev1.ServicePort{Name: "http", Port: 8080})
-	headless.Spec.ClusterIP = corev1.ClusterIPNone
-
-	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{trinoRelease()}, nil)
-	connectionRepo.On("ListKubeServices", mock.Anything, "demo").Return([]corev1.Service{headless}, nil)
-
-	connections, err := svc.ListInternal(context.Background(), "demo")
-
-	require.NoError(t, err)
-	require.Len(t, connections, 1)
-	assert.Empty(t, connections[0].Endpoint, "a headless Service addresses individual pods, not the service")
-}
-
-func TestListInternalPrefersTheManagedConnectionOverTheDerivedOne(t *testing.T) {
-	// Once the CRDs are installed, what the release controller publishes is
-	// authoritative and replaces what we inferred for the same release.
-	svc, connectionRepo, releaseRepo := newServiceUnderTest(t, true)
-
-	releaseRepo.On("List", mock.Anything, "demo", "demo").Return([]crd.Release{trinoRelease()}, nil)
-	connectionRepo.On("ListKubeServices", mock.Anything, "demo").Return([]corev1.Service{
-		kubeService("demo-trino", corev1.ServicePort{Name: "http", Port: 8080}),
-	}, nil)
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-main"},
+			ObjectMeta: metav1.ObjectMeta{Name: "kcd-demo-trino-main"},
 			Spec: crd.ConnectionSpec{
 				Interface:  "trino",
 				OutputName: "main",
-				Values:     map[string]any{"host": "trino.demo.svc.cluster.local", "port": float64(8080)},
+				Values:     map[string]any{"internalUri": "jdbc:trino://trino.demo.svc.cluster.local:8080"},
 			},
 			Status: crd.ConnectionStatus{Parent: "demo-trino", Phase: "READY"},
+		},
+		{
+			// Declared by a user on the Connections page, not published by a
+			// release: it belongs to the external tab.
+			ObjectMeta: metav1.ObjectMeta{Name: "corporate-warehouse"},
+			Spec:       crd.ConnectionSpec{Interface: "database-server"},
 		},
 	}, nil)
 
 	connections, err := svc.ListInternal(context.Background(), "demo")
 
 	require.NoError(t, err)
-	require.Len(t, connections, 1, "the derived entry must not be listed alongside the managed one")
+	require.Len(t, connections, 1)
+	assert.Equal(t, "kcd-demo-trino-main", connections[0].Name)
 	assert.True(t, connections[0].Managed)
-	assert.Equal(t, "demo-trino-main", connections[0].Name)
-	assert.Equal(t, "trino.demo.svc.cluster.local:8080", connections[0].Endpoint)
+	assert.Equal(t, "demo-trino", connections[0].ReleaseName)
+}
+
+// A trino connection carries URIs, never a host and a port. Reading host+port
+// only left the address column on "not available yet" for a Ready connection
+// whose address was in its own values.
+func TestListInternalShowsTheAddressOfAURIContract(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "kcd-demo-hms-metastore"},
+			Spec: crd.ConnectionSpec{
+				Interface:  "hive",
+				OutputName: "metastore",
+				Values:     map[string]any{"thriftUri": "thrift://demo-hms.demo.svc.cluster.local:9083"},
+			},
+			Status: crd.ConnectionStatus{Parent: "demo-hms", Phase: "READY"},
+		},
+	}, nil)
+
+	connections, err := svc.ListInternal(context.Background(), "demo")
+
+	require.NoError(t, err)
+	require.Len(t, connections, 1)
+	assert.Equal(t, "thrift://demo-hms.demo.svc.cluster.local:9083", connections[0].Endpoint)
+	assert.Equal(t, "Hive metastore", connections[0].TypeDisplay)
+}
+
+// Without the CRDs there is nothing to publish a connection, so the honest
+// answer is an empty list rather than a set of guesses.
+func TestListInternalIsEmptyWithoutTheCRDs(t *testing.T) {
+	svc, _, _ := newServiceUnderTest(t, false)
+
+	connections, err := svc.ListInternal(context.Background(), "demo")
+
+	require.NoError(t, err)
+	assert.Empty(t, connections)
 }
 
 // --- Connectivity test ---

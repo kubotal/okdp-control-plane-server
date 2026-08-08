@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -315,122 +314,38 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 
 // --- Internal connections ---
 
+// ListInternal returns the connections the project's own services publish, and
+// only those: a Connection the release controller owns, born from the `outputs`
+// stanza of a package.
+//
+// The console used to add entries it fabricated itself, by matching a release's
+// `okdp.io/service` label against a hardcoded list and guessing an address from
+// the Kubernetes Service whose name looked closest. Those entries had no
+// Connection behind them, so nothing could ever bind them: ListSelectable only
+// offers real ones. They looked exactly like the real entries, and the tab
+// invited the user to wire a service to them, which left copying an address by
+// hand as the only way through. A service that publishes nothing is now absent
+// rather than approximated.
 func (s *DefaultConnectionService) ListInternal(ctx context.Context, project string) ([]models.InternalConnection, error) {
-	releases, err := s.releaseRepo.List(ctx, project, project)
+	if !s.repo.Available(ctx) {
+		return []models.InternalConnection{}, nil
+	}
+
+	connections, err := s.repo.List(ctx, project)
 	if err != nil {
 		return nil, err
 	}
 
-	// Listing the namespace once and matching in memory keeps this to a single
-	// API call whatever the number of deployed services.
-	kubeServices, err := s.repo.ListKubeServices(ctx, project)
-	if err != nil {
-		logrus.WithError(err).Warn("Failed to list Kubernetes services; internal connections will have no endpoint")
-		kubeServices = nil
-	}
-
-	result := make([]models.InternalConnection, 0)
-	for i := range releases {
-		release := &releases[i]
-		serviceName := release.Labels[crd.LabelService]
-		connectionType, provides := s.catalog.ForService(serviceName)
-		if !provides {
+	result := make([]models.InternalConnection, 0, len(connections))
+	for i := range connections {
+		if !connections[i].IsManaged() {
 			continue
 		}
-		result = append(result, s.deriveInternal(release, serviceName, connectionType, kubeServices, project))
-	}
-
-	// Once the CRDs are installed, the connections the release controller owns
-	// are the authoritative description of what a service exposes; they replace
-	// the entry derived for the same release.
-	if s.repo.Available(ctx) {
-		result = s.overlayManagedConnections(ctx, project, result)
+		result = append(result, s.managedToInternal(&connections[i], project))
 	}
 
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
-}
-
-func (s *DefaultConnectionService) deriveInternal(
-	release *crd.Release,
-	serviceName string,
-	connectionType *models.ConnectionType,
-	kubeServices []corev1.Service,
-	project string,
-) models.InternalConnection {
-	host, port := resolveEndpoint(kubeServices, release.Name, serviceName, connectionType.Providers, project)
-
-	values := map[string]any{}
-	if _, hasHost := connectionType.Field("host"); hasHost && host != "" {
-		values["host"] = host
-	}
-	if _, hasPort := connectionType.Field("port"); hasPort && port != 0 {
-		values["port"] = port
-	}
-
-	endpoint := ""
-	if host != "" && port != 0 {
-		endpoint = fmt.Sprintf("%s:%d", host, port)
-	}
-
-	createdAt := ""
-	if ts := release.CreationTimestamp; !ts.IsZero() {
-		createdAt = ts.Format(time.RFC3339)
-	}
-
-	return models.InternalConnection{
-		Name:        release.Name,
-		Type:        connectionType.Name,
-		TypeDisplay: connectionType.DisplayName,
-		Icon:        connectionType.Icon,
-		Category:    connectionType.Category,
-		Service:     serviceName,
-		ReleaseName: release.Name,
-		Namespace:   project,
-		Status:      models.MapPhaseToStatus(release.Status.Phase),
-		Endpoint:    endpoint,
-		Host:        host,
-		Port:        port,
-		Values:      values,
-		Managed:     false,
-		CreatedAt:   createdAt,
-	}
-}
-
-func (s *DefaultConnectionService) overlayManagedConnections(
-	ctx context.Context,
-	project string,
-	derived []models.InternalConnection,
-) []models.InternalConnection {
-	connections, err := s.repo.List(ctx, project)
-	if err != nil {
-		logrus.WithError(err).Warn("Failed to list managed connections; falling back to the derived ones")
-		return derived
-	}
-
-	supersededRelease := map[string]bool{}
-	var managed []models.InternalConnection
-	for i := range connections {
-		connection := &connections[i]
-		if !connection.IsManaged() {
-			continue
-		}
-		if connection.Status.Parent != "" {
-			supersededRelease[connection.Status.Parent] = true
-		}
-		managed = append(managed, s.managedToInternal(connection, project))
-	}
-	if len(managed) == 0 {
-		return derived
-	}
-
-	result := make([]models.InternalConnection, 0, len(derived)+len(managed))
-	for _, entry := range derived {
-		if !supersededRelease[entry.ReleaseName] {
-			result = append(result, entry)
-		}
-	}
-	return append(result, managed...)
 }
 
 func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection, project string) models.InternalConnection {
@@ -462,93 +377,19 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		entry.TypeDisplay = connection.Spec.Interface
 	}
 
+	entry.Endpoint = endpointFrom(values, s.catalog, connection.Spec.Interface)
+	// host and port stay filled when the contract has them, for the columns that
+	// show them separately. Most contracts publish a URI instead.
 	if host, ok := values["host"].(string); ok {
 		entry.Host = host
 		if port, ok := toFloat(values["port"]); ok {
 			entry.Port = int32(port)
-			entry.Endpoint = fmt.Sprintf("%s:%d", host, entry.Port)
 		}
 	}
 	if ts := connection.CreationTimestamp; !ts.IsZero() {
 		entry.CreatedAt = ts.Format(time.RFC3339)
 	}
 	return entry
-}
-
-// resolveEndpoint finds the in-cluster address of the service backing a
-// release. Nothing is guessed: an address is only returned when a Kubernetes
-// Service actually carries it, so the console never shows an endpoint that
-// would not resolve.
-func resolveEndpoint(
-	kubeServices []corev1.Service,
-	releaseName, serviceName string,
-	providers models.ConnectionProviders,
-	namespace string,
-) (string, int32) {
-	best := -1
-	bestScore := 0
-	for i := range kubeServices {
-		score := serviceScore(&kubeServices[i], releaseName, serviceName)
-		if score > bestScore {
-			best, bestScore = i, score
-		}
-	}
-	if best < 0 {
-		return "", 0
-	}
-
-	kubeService := &kubeServices[best]
-	host := fmt.Sprintf("%s.%s.svc.cluster.local", kubeService.Name, namespace)
-	return host, pickPort(kubeService.Spec.Ports, providers)
-}
-
-// serviceScore rates how likely a Service is to be the one exposing a release.
-// A zero score excludes the Service.
-func serviceScore(kubeService *corev1.Service, releaseName, serviceName string) int {
-	// Headless and per-pod Services address individual replicas, not the
-	// service as a whole.
-	if kubeService.Spec.ClusterIP == corev1.ClusterIPNone {
-		return 0
-	}
-	// Discovery/gossip ports of a cluster are not consumable endpoints.
-	if strings.HasSuffix(kubeService.Name, "-headless") || strings.HasSuffix(kubeService.Name, "-worker") {
-		return 0
-	}
-
-	name := kubeService.Name
-	switch {
-	case name == releaseName:
-		return 4
-	case strings.HasPrefix(name, releaseName+"-"):
-		return 3
-	case serviceName != "" && name == serviceName:
-		return 2
-	case serviceName != "" && strings.Contains(name, serviceName):
-		return 1
-	default:
-		return 0
-	}
-}
-
-// pickPort prefers the port names the connection type declares, in order, and
-// falls back to the Service's first port.
-func pickPort(ports []corev1.ServicePort, providers models.ConnectionProviders) int32 {
-	for _, wanted := range providers.PortNames {
-		for _, port := range ports {
-			if port.Name == wanted {
-				return port.Port
-			}
-		}
-	}
-	for _, port := range ports {
-		if port.Port == providers.DefaultPort {
-			return port.Port
-		}
-	}
-	if len(ports) > 0 {
-		return ports[0].Port
-	}
-	return providers.DefaultPort
 }
 
 // --- helpers ---
@@ -724,4 +565,32 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
+}
+
+// endpointFrom returns the address a reader can use to reach a connection.
+//
+// Which value carries it depends on the contract: database-server publishes a
+// host and a port, trino a URI, hive a thrift URI, s3 a URL. Reading host+port
+// and nothing else, as this did, meant a Ready trino, hive or s3 connection
+// showed "not available yet" while its address sat in its own values, two
+// clicks away in the details panel. The descriptor now names the keys that
+// carry it, in order of preference.
+func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, interfaceName string) string {
+	if connectionType, known := catalog.Get(interfaceName); known {
+		for _, key := range connectionType.EndpointFrom {
+			if value, ok := values[key].(string); ok && value != "" {
+				return value
+			}
+		}
+	}
+	// The host+port convention, kept as a fallback so a contract shaped like
+	// database-server needs no declaration to be addressable.
+	host, ok := values["host"].(string)
+	if !ok || host == "" {
+		return ""
+	}
+	if port, ok := toFloat(values["port"]); ok {
+		return fmt.Sprintf("%s:%d", host, int32(port))
+	}
+	return host
 }

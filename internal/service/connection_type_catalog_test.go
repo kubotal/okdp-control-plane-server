@@ -22,23 +22,13 @@ func TestEmbeddedCatalogLoadsBuiltInTypes(t *testing.T) {
 		names[ct.Name] = true
 	}
 
-	// The two types the console offers for creation, plus Trino which is
-	// only ever discovered from a deployed service.
+	// One descriptor per ClusterInterface the platform publishes.
 	assert.True(t, names["database-server"])
 	assert.True(t, names["s3"])
 	assert.True(t, names["trino"])
-}
-
-func TestExternalFlagMatchesCreationSupport(t *testing.T) {
-	catalog := newTestCatalog(t)
-
-	database, ok := catalog.Get("database-server")
-	require.True(t, ok)
-	assert.True(t, database.External, "a database server is declarable by hand")
-
-	trino, ok := catalog.Get("trino")
-	require.True(t, ok)
-	assert.False(t, trino.External, "Trino only comes from a deployed release")
+	assert.True(t, names["hive"])
+	assert.True(t, names["iceberg-catalog"])
+	assert.True(t, names["oidc"])
 }
 
 func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
@@ -89,22 +79,6 @@ func TestPostgreSQLOffersThePreferSSLMode(t *testing.T) {
 	if sslMode.Default != "prefer" {
 		t.Errorf("sslMode default = %v, want prefer", sslMode.Default)
 	}
-}
-
-func TestForServiceResolvesDeployedProviders(t *testing.T) {
-	catalog := newTestCatalog(t)
-
-	ct, ok := catalog.ForService("trino")
-	require.True(t, ok, "a deployed Trino must be recognized as a connection provider")
-	assert.Equal(t, "trino", ct.Name)
-
-	// SeaweedFS is the object storage shipped by the platform packages.
-	ct, ok = catalog.ForService("seaweedfs")
-	require.True(t, ok)
-	assert.Equal(t, "s3", ct.Name)
-
-	_, ok = catalog.ForService("jupyterhub")
-	assert.False(t, ok, "a service that provides no connection must not be listed")
 }
 
 func TestValidateAcceptsAWellFormedPayload(t *testing.T) {
@@ -262,4 +236,45 @@ func TestValidateIgnoresAFieldTheEngineRulesOut(t *testing.T) {
 	})
 
 	assert.NoError(t, err)
+}
+
+// The address of a connection depends on its contract: database-server carries
+// a host and a port, trino a URI, hive a thrift URI, s3 a URL. Reading host and
+// port only, as the code did, showed "not available yet" on a Ready trino, hive
+// or s3 connection whose address sat in its own values.
+func TestEndpointComesFromTheContract(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	// A URI contract: the in-cluster address wins over the public one.
+	assert.Equal(t,
+		"thrift://demo-hms.demo.svc.cluster.local:9083",
+		endpointFrom(map[string]any{"thriftUri": "thrift://demo-hms.demo.svc.cluster.local:9083"}, catalog, "hive"))
+	assert.Equal(t,
+		"jdbc:trino://trino.demo.svc.cluster.local:8080",
+		endpointFrom(map[string]any{
+			"url":         "https://trino.example.com",
+			"uri":         "jdbc:trino://trino.example.com:443",
+			"internalUri": "jdbc:trino://trino.demo.svc.cluster.local:8080",
+		}, catalog, "trino"))
+
+	// The host+port convention still works with no declaration.
+	assert.Equal(t, "db.example.com:5432",
+		endpointFrom(map[string]any{"host": "db.example.com", "port": float64(5432)}, catalog, "database-server"))
+
+	// Nothing to show is an empty string, never a guess.
+	assert.Equal(t, "", endpointFrom(map[string]any{}, catalog, "hive"))
+	assert.Equal(t, "", endpointFrom(map[string]any{"realm": "main"}, catalog, "unknown-contract"))
+}
+
+// Every contract the platform publishes must be declarable, or the wizard
+// leaves the user stuck with "No compatible connection available" and no way to
+// create one. These are the six ClusterInterfaces of platform-packages.
+func TestEveryPlatformContractIsInTheCatalog(t *testing.T) {
+	catalog := newTestCatalog(t)
+
+	for _, name := range []string{"database-server", "s3", "trino", "hive", "iceberg-catalog", "oidc"} {
+		ct, ok := catalog.Get(name)
+		require.True(t, ok, "%s is a ClusterInterface of the platform and must be declarable", name)
+		assert.True(t, ct.External, "%s must offer a creation form", name)
+	}
 }

@@ -1,0 +1,22 @@
+{
+  "name": "oidc",
+  "displayName": "OIDC provider",
+  "description": "Shared OIDC provider configuration. The OAuth client is per consumer: each package takes its own client Secret as an ordinary parameter, so none is declared here.",
+  "icon": "pi pi-id-card",
+  "category": "identity",
+  "external": true,
+  "endpointFrom": ["issuerUri"],
+  "fields": [
+    {
+      "name": "issuerUri",
+      "label": "Issuer URI",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://sso.example.com/realms/main"
+    },
+    { "name": "authUrl", "label": "Authorization URL", "type": "string", "required": true },
+    { "name": "tokenUrl", "label": "Token URL", "type": "string", "required": true },
+    { "name": "jwksUri", "label": "JWKS URI", "type": "string", "required": true },
+    { "name": "userinfoUrl", "label": "Userinfo URL", "type": "string", "required": true }
+  ]
+}

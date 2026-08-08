@@ -13,8 +13,8 @@ import (
 
 // connectionTypesFS holds the built-in connection types. Adding a type is a
 // matter of dropping a JSON file here: the same descriptor drives the form
-// rendered by the console, the server-side validation of submitted values,
-// and the recognition of deployed services as connection providers.
+// rendered by the console, the server-side validation of submitted values, and
+// the address shown for a connection of that contract.
 //
 //go:embed connectiontypes/*.json
 var connectionTypesFS embed.FS
@@ -28,9 +28,6 @@ var connectionTypesFS embed.FS
 type ConnectionTypeCatalog interface {
 	List() []models.ConnectionType
 	Get(name string) (*models.ConnectionType, bool)
-	// ForService returns the connection type provided by a deployed service,
-	// identified by its `okdp.io/service` label.
-	ForService(service string) (*models.ConnectionType, bool)
 	// Validate checks submitted values against the type descriptor.
 	Validate(typeName string, values map[string]any) error
 	// ValidateUpdate is Validate for an edit. The console does not resend a
@@ -44,9 +41,8 @@ type ConnectionTypeCatalog interface {
 }
 
 type embeddedCatalog struct {
-	types      []models.ConnectionType
-	byName     map[string]*models.ConnectionType
-	byProvider map[string]*models.ConnectionType
+	types  []models.ConnectionType
+	byName map[string]*models.ConnectionType
 }
 
 // NewEmbeddedConnectionTypeCatalog loads the built-in connection types. It fails
@@ -58,10 +54,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 		return nil, fmt.Errorf("failed to read embedded connection types: %w", err)
 	}
 
-	c := &embeddedCatalog{
-		byName:     map[string]*models.ConnectionType{},
-		byProvider: map[string]*models.ConnectionType{},
-	}
+	c := &embeddedCatalog{byName: map[string]*models.ConnectionType{}}
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
@@ -91,12 +84,6 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 			return nil, fmt.Errorf("duplicate connection type %q", ct.Name)
 		}
 		c.byName[ct.Name] = ct
-		for _, svc := range ct.Providers.Services {
-			if other, dup := c.byProvider[svc]; dup {
-				return nil, fmt.Errorf("service %q is claimed by both %q and %q", svc, other.Name, ct.Name)
-			}
-			c.byProvider[svc] = ct
-		}
 	}
 
 	return c, nil
@@ -139,11 +126,6 @@ func (c *embeddedCatalog) List() []models.ConnectionType {
 
 func (c *embeddedCatalog) Get(name string) (*models.ConnectionType, bool) {
 	ct, ok := c.byName[name]
-	return ct, ok
-}
-
-func (c *embeddedCatalog) ForService(service string) (*models.ConnectionType, bool) {
-	ct, ok := c.byProvider[strings.ToLower(service)]
 	return ct, ok
 }
 

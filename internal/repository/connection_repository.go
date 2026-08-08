@@ -40,10 +40,6 @@ type ConnectionRepository interface {
 
 	CreateOrUpdateSecret(ctx context.Context, namespace, name string, data map[string][]byte) error
 	DeleteSecret(ctx context.Context, namespace, name string) error
-
-	// ListKubeServices returns the Kubernetes Services of a namespace, from
-	// which the in-cluster endpoint of an internal connection is resolved.
-	ListKubeServices(ctx context.Context, namespace string) ([]corev1.Service, error)
 }
 
 // crdAvailabilityTTL bounds how long a negative probe is trusted, so that

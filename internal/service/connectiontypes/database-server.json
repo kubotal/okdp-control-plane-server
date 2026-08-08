@@ -108,22 +108,5 @@
         "value": "mysql"
       }
     }
-  ],
-  "providers": {
-    "services": [
-      "postgresql",
-      "postgres",
-      "mysql",
-      "mariadb"
-    ],
-    "portNames": [
-      "postgresql",
-      "postgres",
-      "tcp-postgresql",
-      "mysql",
-      "mariadb",
-      "tcp-mysql"
-    ],
-    "defaultPort": 5432
-  }
+  ]
 }
