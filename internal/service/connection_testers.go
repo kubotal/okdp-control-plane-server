@@ -38,10 +38,32 @@ func failure(reason, format string, args ...any) *testFailure {
 	return &testFailure{reason: reason, message: fmt.Sprintf(format, args...)}
 }
 
-// connectionTester probes a live endpoint with the submitted values. A nil
-// error means the endpoint answered *and* accepted the credentials — a
-// reachability check alone would report success for a wrong password.
-type connectionTester func(ctx context.Context, values connectionValues) error
+// connectionTester probes the live endpoints of a connection. It returns one
+// check per path it tried: a contract may publish several, and a store
+// reachable from outside the cluster and unreachable from inside it is a real
+// case worth naming. A check succeeds only when the endpoint answered *and*
+// accepted the credentials, since reachability alone would pass a wrong
+// password.
+type connectionTester func(ctx context.Context, values connectionValues) []models.ConnectionTestCheck
+
+// check turns the error of a single probe into a reportable verdict.
+func check(label, target string, decisive bool, err error) models.ConnectionTestCheck {
+	result := models.ConnectionTestCheck{Label: label, Target: target, Decisive: decisive}
+	if err == nil {
+		result.Success = true
+		result.Message = "Connection successful."
+		return result
+	}
+	var failed *testFailure
+	if errors.As(err, &failed) {
+		result.Message = failed.message
+		result.Reason = failed.reason
+	} else {
+		result.Message = err.Error()
+		result.Reason = models.TestReasonUnknown
+	}
+	return result
+}
 
 // connectionTesters holds the probe of each type that has one. A type absent
 // from the map is reported as not testable rather than silently passing.
@@ -51,16 +73,20 @@ var connectionTesters = map[string]connectionTester{
 }
 
 // testDatabaseServer picks the driver from the engine field. One type means one
-// contract, so the entry form is shared and only the probe differs.
-func testDatabaseServer(ctx context.Context, values connectionValues) error {
+// contract, so the entry form is shared and only the probe differs. A database
+// publishes a single address, so there is a single check.
+func testDatabaseServer(ctx context.Context, values connectionValues) []models.ConnectionTestCheck {
+	target := net.JoinHostPort(values.String("host"), fmt.Sprint(values.Int("port", 0)))
+	var err error
 	switch engine := values.String("engine"); engine {
 	case "postgresql":
-		return testPostgreSQL(ctx, values)
+		err = testPostgreSQLAt(ctx, values)
 	case "mysql":
-		return testMySQL(ctx, values)
+		err = testMySQLAt(ctx, values)
 	default:
-		return failure(models.TestReasonInvalidConfig, "Unknown database engine %q", engine)
+		err = failure(models.TestReasonInvalidConfig, "Unknown database engine %q", engine)
 	}
+	return []models.ConnectionTestCheck{check("Database", target, true, err)}
 }
 
 // connectionValues reads submitted values, which arrive as decoded JSON.
@@ -127,7 +153,7 @@ func postgresConfig(values connectionValues) (*pgx.ConnConfig, error) {
 	return config, nil
 }
 
-func testPostgreSQL(ctx context.Context, values connectionValues) error {
+func testPostgreSQLAt(ctx context.Context, values connectionValues) error {
 	config, err := postgresConfig(values)
 	if err != nil {
 		return err
@@ -191,7 +217,7 @@ func mysqlConfig(values connectionValues) (*mysqldriver.Config, error) {
 	return config, nil
 }
 
-func testMySQL(ctx context.Context, values connectionValues) error {
+func testMySQLAt(ctx context.Context, values connectionValues) error {
 	config, err := mysqlConfig(values)
 	if err != nil {
 		return err
@@ -228,8 +254,31 @@ func classifyMySQLError(ctx context.Context, err error) error {
 
 // --- S3-compatible object storage ---
 
-func testS3(ctx context.Context, values connectionValues) error {
-	endpoint := values.String("apiUrl")
+// testS3 probes every address the contract publishes. The in-cluster URL is the
+// one a workload will use, so it is the decisive verdict; testing only the
+// public one, as this did, reported success for a store the deployed service
+// could not reach.
+func testS3(ctx context.Context, values connectionValues) []models.ConnectionTestCheck {
+	internal := values.String("internalUrl")
+	public := values.String("apiUrl")
+
+	var checks []models.ConnectionTestCheck
+	if internal != "" {
+		checks = append(checks, check("In-cluster URL", internal, true, testS3At(ctx, values, internal)))
+	}
+	if public != "" {
+		// Decisive only when no in-cluster address exists, in which case this is
+		// the path the workload takes.
+		checks = append(checks, check("Public URL", public, internal == "", testS3At(ctx, values, public)))
+	}
+	if len(checks) == 0 {
+		checks = append(checks, check("S3 endpoint", "", true,
+			failure(models.TestReasonInvalidConfig, "Endpoint is required.")))
+	}
+	return checks
+}
+
+func testS3At(ctx context.Context, values connectionValues, endpoint string) error {
 	host, secure, err := parseS3Endpoint(endpoint)
 	if err != nil {
 		return err

@@ -319,14 +319,22 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 		return result(false, models.TestReasonInvalidConfig, "This connection type cannot be tested.")
 	}
 
-	if err := tester(ctx, values); err != nil {
-		var testErr *testFailure
-		if errors.As(err, &testErr) {
-			return result(false, testErr.reason, testErr.message)
+	// A contract may publish several addresses. The verdict is the one a
+	// workload will actually take; the other checks travel along for diagnosis,
+	// because a store reachable publicly and unreachable in-cluster is exactly
+	// the case a green test used to hide.
+	checks := tester(ctx, values)
+	outcome := result(true, "", "Connection successful.")
+	outcome.Checks = checks
+	for _, c := range checks {
+		if !c.Decisive {
+			continue
 		}
-		return result(false, models.TestReasonUnknown, err.Error())
+		outcome.Success = c.Success
+		outcome.Message = c.Message
+		outcome.Reason = c.Reason
 	}
-	return result(true, "", "Connection successful.")
+	return outcome
 }
 
 // --- Internal connections ---

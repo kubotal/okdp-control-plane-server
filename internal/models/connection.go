@@ -154,12 +154,29 @@ type ConnectionTestRequest struct {
 	Values map[string]any `json:"values" binding:"required"`
 }
 
-// ConnectionTestResult is the outcome of a connectivity test.
+// ConnectionTestResult is the outcome of a connectivity test. Success is the
+// verdict that matters for a deployment: the path a workload will take. Checks
+// details every path that was probed, because a store reachable from outside
+// the cluster and unreachable from inside it is a real and confusing case.
 type ConnectionTestResult struct {
-	Success    bool   `json:"success"`
-	Message    string `json:"message"`
-	Reason     string `json:"reason,omitempty"`
-	DurationMs int64  `json:"durationMs"`
+	Success    bool                  `json:"success"`
+	Message    string                `json:"message"`
+	Reason     string                `json:"reason,omitempty"`
+	DurationMs int64                 `json:"durationMs"`
+	Checks     []ConnectionTestCheck `json:"checks,omitempty"`
+}
+
+// ConnectionTestCheck is one probed path.
+type ConnectionTestCheck struct {
+	// Label names the path for a reader ("In-cluster URL", "Public URL").
+	Label  string `json:"label"`
+	Target string `json:"target"`
+	// Decisive marks the path a workload will actually take, the one Success
+	// reflects. The others are shown for diagnosis.
+	Decisive bool   `json:"decisive"`
+	Success  bool   `json:"success"`
+	Message  string `json:"message"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // CredentialsSecretRef is the Secret holding a connection's credentials, with
@@ -229,6 +246,12 @@ type PackageInput struct {
 	Parameter string `json:"parameter,omitempty"`
 	// Optional reports that the package tolerates no connection at all.
 	Optional bool `json:"optional"`
+	// Default is the template the package falls back to when the deployer picks
+	// nothing. KuboCD forbids a literal here, so it is always rendered against
+	// the Context: this is how an Environment says "here, the database is that
+	// one" without the deployer naming it. The console must therefore leave the
+	// parameter out rather than send an empty string, which would win over it.
+	Default string `json:"default,omitempty"`
 	// Description is shown next to the field.
 	Description string `json:"description,omitempty"`
 }

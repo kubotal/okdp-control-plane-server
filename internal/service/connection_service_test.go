@@ -446,16 +446,16 @@ func TestTestReportsAnUnreachableHost(t *testing.T) {
 // which would report a MySQL server unreachable on the PostgreSQL port. The
 // catalog's enum stops this at the door, so the guard is tested directly.
 func TestDatabaseProbeRejectsAnUnknownEngine(t *testing.T) {
-	err := testDatabaseServer(context.Background(), connectionValues{
+	checks := testDatabaseServer(context.Background(), connectionValues{
 		"engine": "oracle",
 		"host":   "db.example.com",
 		"port":   float64(1521),
 	})
 
-	var failed *testFailure
-	require.ErrorAs(t, err, &failed)
-	assert.Equal(t, models.TestReasonInvalidConfig, failed.reason)
-	assert.Contains(t, failed.message, "oracle")
+	require.Len(t, checks, 1)
+	assert.False(t, checks[0].Success)
+	assert.Equal(t, models.TestReasonInvalidConfig, checks[0].Reason)
+	assert.Contains(t, checks[0].Message, "oracle")
 }
 
 // findCall returns the first recorded call to method, or nil.

@@ -623,11 +623,16 @@ func inputsFromMarkers(doc map[string]any) []models.PackageInput {
 			continue
 		}
 		description, _ := property["description"].(string)
+		// The default survives the groom as an ordinary schema default. Passing
+		// it on lets the form say the binding is inherited instead of showing
+		// None, which reads as "nothing", the opposite of the truth.
+		defaultValue, _ := property["default"].(string)
 		inputs = append(inputs, models.PackageInput{
 			Alias:       name,
 			Interface:   iface,
 			Parameter:   name,
 			Optional:    !required[name],
+			Default:     defaultValue,
 			Description: description,
 		})
 	}
