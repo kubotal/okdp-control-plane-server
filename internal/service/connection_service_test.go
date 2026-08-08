@@ -36,10 +36,12 @@ func postgresRequest() models.ConnectionRequest {
 		Type:        "postgresql",
 		Description: "Corporate warehouse",
 		Values: map[string]any{
+			"engine":   "postgresql",
+			"driver":   "org.postgresql.Driver",
 			"host":     "db.example.com",
 			"port":     float64(5432),
-			"database": "analytics",
-			"user":     "reader",
+			"dbName":   "analytics",
+			"username": "reader",
 			"password": "s3cret",
 			"sslMode":  "require",
 		},
@@ -97,7 +99,12 @@ func TestCreateStoresCredentialsInASecretAndNotInTheSpec(t *testing.T) {
 	require.NotNil(t, stored)
 	assert.NotContains(t, stored.Spec.Values, "password", "the password must never be written to the CRD")
 	assert.Equal(t, "db.example.com", stored.Spec.Values["host"])
-	assert.Equal(t, "postgresql", stored.Spec.Interface)
+	// The contract, not the entry form: the postgresql type declares the
+	// database-server Interface, which is what a package's connectionRef asks for.
+	assert.Equal(t, "database-server", stored.Spec.Interface)
+	assert.Equal(t, "warehouse-credentials", stored.Spec.Values["secretRef"],
+		"a consumer reads the Secret name from spec.values, it cannot see annotations")
+	assert.NotContains(t, stored.Spec.Values, "username", "the user is a credential, it belongs to the Secret")
 	assert.Equal(t, "demo/warehouse-credentials", stored.Annotations[AnnotationCredentialsSecret])
 
 	// The response tells the console which fields are credentials without
@@ -123,18 +130,50 @@ func TestCreateRemovesTheSecretWhenTheConnectionIsRejected(t *testing.T) {
 	connectionRepo.AssertCalled(t, "DeleteSecret", mock.Anything, "demo", "warehouse-credentials")
 }
 
-func TestUpdateKeepsTheStoredPasswordWhenItIsNotResubmitted(t *testing.T) {
+func TestUpdateOnlyWritesTheResubmittedCredentials(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
 	existing := &crd.Connection{
 		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
-		Spec:       crd.ConnectionSpec{Interface: "postgresql"},
+		Spec:       crd.ConnectionSpec{Interface: "database-server"},
+	}
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
+	connectionRepo.On("Update", mock.Anything, "demo", mock.Anything).Return(nil)
+	connectionRepo.On("CreateOrUpdateSecret", mock.Anything, "demo", "warehouse-credentials", mock.Anything).Return(nil)
+
+	req := postgresRequest()
+	delete(req.Values, "password") // the console does not resend an unchanged credential
+
+	_, err := svc.Update(context.Background(), "demo", "warehouse", req)
+	require.NoError(t, err)
+
+	// Only what was resubmitted is written. The stored password survives because
+	// CreateOrUpdateSecret merges into the existing Secret instead of replacing it.
+	call := findCall(connectionRepo, "CreateOrUpdateSecret")
+	require.NotNil(t, call, "the resubmitted username must be written")
+	written := call.Arguments.Get(3).(map[string][]byte)
+	assert.Contains(t, written, "username")
+	assert.NotContains(t, written, "password")
+}
+
+// TestUpdateWithNoCredentialAtAllLeavesTheSecretAlone covers the case the
+// merge cannot: nothing to write means nothing is written.
+func TestUpdateWithNoCredentialAtAllLeavesTheSecretAlone(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	existing := &crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
+		Spec: crd.ConnectionSpec{
+			Interface: "database-server",
+			Values:    map[string]any{"secretRef": "warehouse-credentials"},
+		},
 	}
 	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
 	connectionRepo.On("Update", mock.Anything, "demo", mock.Anything).Return(nil)
 
 	req := postgresRequest()
-	delete(req.Values, "password") // the console does not resend an unchanged credential
+	delete(req.Values, "password")
+	delete(req.Values, "username")
 
 	_, err := svc.Update(context.Background(), "demo", "warehouse", req)
 
@@ -443,10 +482,12 @@ func TestTestReportsAnUnreachableHost(t *testing.T) {
 		Type: "postgresql",
 		Values: map[string]any{
 			// Reserved by RFC 6761 to never resolve.
+			"engine":   "postgresql",
+			"driver":   "org.postgresql.Driver",
 			"host":     "nothing.invalid",
 			"port":     float64(5432),
-			"database": "analytics",
-			"user":     "reader",
+			"dbName":   "analytics",
+			"username": "reader",
 			"password": "s3cret",
 			"sslMode":  "disable",
 		},

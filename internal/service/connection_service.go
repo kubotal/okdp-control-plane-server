@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -30,15 +28,17 @@ const AnnotationCredentialsSecret = "okdp.io/credentials-secret"
 // credentialsSecretSuffix mirrors the convention already used by secret stores.
 const credentialsSecretSuffix = "-credentials"
 
-// Values published so a KuboCD package can consume the connection: where the
-// credentials live, and which version they are. Neither discloses a value.
-// They are part of every Interface schema that has credentials, so a schema
-// missing them makes the connection fail validation — which is the point:
-// a contract that cannot describe its credentials cannot be consumed.
-const (
-	valueCredentialsSecret  = "credentialsSecret"
-	valueCredentialsVersion = "credentialsVersion"
-)
+// valueSecretRef names the value published so a KuboCD package can bind the
+// credentials: the NAME of the Secret holding them, never a value. It matches
+// the secretRef field declared by the KuboCD Interfaces, which are the contract
+// of record.
+//
+// A credentialsVersion digest used to be published alongside, so that rotating a
+// password changed the Connection and reached running pods. It was dropped: the
+// key alone changes nothing unless every consuming package propagates it into a
+// pod template annotation, and Reloader already restarts workloads when a Secret
+// they mount changes.
+const valueSecretRef = "secretRef"
 
 // ConnectionService manages the connections of a project and of the platform.
 //
@@ -159,10 +159,8 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 		if err := s.repo.CreateOrUpdateSecret(ctx, secretNamespace, secretName, secrets); err != nil {
 			return nil, fmt.Errorf("failed to store the credentials: %w", err)
 		}
-		// Tell consumers where the credentials are and which version they are,
-		// so a package can bind them and a rotation reaches the running pods.
-		public[valueCredentialsSecret] = secretName
-		public[valueCredentialsVersion] = credentialsFingerprint(secrets)
+		// Tell consumers where the credentials are, so a package can bind them.
+		public[valueSecretRef] = secretName
 	}
 
 	connection := &crd.Connection{
@@ -175,7 +173,9 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 			},
 		},
 		Spec: crd.ConnectionSpec{
-			Interface:   req.Type,
+			// The contract, not the entry form: PostgreSQL and MySQL both declare
+			// the database-server Interface, and a package asks for that one.
+			Interface:   connectionType.InterfaceName(),
 			Description: req.Description,
 			Values:      public,
 		},
@@ -226,20 +226,19 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		if err := s.repo.CreateOrUpdateSecret(ctx, secretNamespace, secretName, secrets); err != nil {
 			return nil, fmt.Errorf("failed to store the credentials: %w", err)
 		}
-		public[valueCredentialsSecret] = secretName
-		public[valueCredentialsVersion] = credentialsFingerprint(secrets)
+		public[valueSecretRef] = secretName
 	} else {
 		// The credentials did not change, so neither do the fields describing
 		// them — and they must be carried over: splitValues rebuilt the values
 		// from the request, which no longer mentions them.
-		for _, key := range []string{valueCredentialsSecret, valueCredentialsVersion} {
+		for _, key := range []string{valueSecretRef} {
 			if previous, ok := existing.Spec.Values[key]; ok {
 				public[key] = previous
 			}
 		}
 	}
 
-	existing.Spec.Interface = req.Type
+	existing.Spec.Interface = connectionType.InterfaceName()
 	existing.Spec.Description = req.Description
 	existing.Spec.Values = public
 	if existing.Labels == nil {
@@ -613,34 +612,6 @@ func splitValues(connectionType *models.ConnectionType, values map[string]any) (
 		public[name] = value
 	}
 	return public, secrets
-}
-
-// credentialsFingerprint is a short, stable digest of the credential values.
-//
-// It is published in spec.values so that rotating a password changes the
-// Connection itself. Without it nothing downstream would notice: the KuboCD
-// release controller watches Connections, not Secrets, and Kubernetes does not
-// restart a pod when a mounted Secret changes — a consumer would keep the old
-// password until something unrelated happened to restart it.
-//
-// A digest, not the value: it identifies a version without disclosing it.
-func credentialsFingerprint(secrets map[string][]byte) string {
-	if len(secrets) == 0 {
-		return ""
-	}
-	names := make([]string, 0, len(secrets))
-	for name := range secrets {
-		names = append(names, name)
-	}
-	sort.Strings(names) // map order would otherwise change the digest at random
-	digest := sha256.New()
-	for _, name := range names {
-		digest.Write([]byte(name))
-		digest.Write([]byte{0})
-		digest.Write(secrets[name])
-		digest.Write([]byte{0})
-	}
-	return hex.EncodeToString(digest.Sum(nil))[:12]
 }
 
 func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namespace string) models.ConnectionResponse {

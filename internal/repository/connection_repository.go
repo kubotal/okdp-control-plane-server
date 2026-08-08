@@ -230,6 +230,18 @@ func (r *k8sConnectionRepository) CreateOrUpdateSecret(ctx context.Context, name
 		return err
 	}
 
+	// Merge rather than replace. The console only resubmits the credentials the
+	// user actually retyped, so a type holding several of them (a user and a
+	// password) would otherwise lose the ones left untouched.
+	merged := make(map[string][]byte, len(existing.Data)+len(data))
+	for key, value := range existing.Data {
+		merged[key] = value
+	}
+	for key, value := range data {
+		merged[key] = value
+	}
+	secret.Data = merged
+
 	secret.ResourceVersion = existing.ResourceVersion
 	_, err = r.typedClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err

@@ -1,11 +1,34 @@
 {
   "name": "postgresql",
+  "interface": "database-server",
   "displayName": "PostgreSQL",
   "description": "PostgreSQL database server.",
   "icon": "pi pi-database",
   "category": "database",
   "external": true,
   "fields": [
+    {
+      "name": "engine",
+      "label": "Engine",
+      "type": "enum",
+      "required": true,
+      "default": "postgresql",
+      "options": [
+        "postgresql"
+      ],
+      "help": "Read by consuming packages to build their JDBC URL. Fixed for this type."
+    },
+    {
+      "name": "driver",
+      "label": "JDBC driver",
+      "type": "enum",
+      "required": true,
+      "default": "org.postgresql.Driver",
+      "options": [
+        "org.postgresql.Driver"
+      ],
+      "help": "Driver class name, read by packages that configure a JDBC datasource."
+    },
     {
       "name": "host",
       "label": "Host",
@@ -23,17 +46,19 @@
       "max": 65535
     },
     {
-      "name": "database",
+      "name": "dbName",
       "label": "Database",
       "type": "string",
       "required": true,
       "placeholder": "analytics"
     },
     {
-      "name": "user",
+      "name": "username",
       "label": "User",
       "type": "string",
-      "required": true
+      "required": true,
+      "secret": true,
+      "help": "Stored in the credentials Secret, under the username key, as the database-server contract expects."
     },
     {
       "name": "password",
@@ -55,7 +80,7 @@
         "verify-full",
         "disable"
       ],
-      "help": "'prefer' tries TLS and connects in clear text if the server refuses it — the safe default for a server you do not control. 'require' encrypts without validating the certificate; use 'verify-full' when the server presents one your cluster trusts."
+      "help": "'prefer' tries TLS and connects in clear text if the server refuses it, the safe default for a server you do not control. 'require' encrypts without validating the certificate, use 'verify-full' when the server presents one your cluster trusts."
     }
   ],
   "providers": {
@@ -71,7 +96,7 @@
     "defaultPort": 5432
   },
   "usage": {
-    "uri": "postgresql://{user}:${PGPASSWORD}@{host}:{port}/{database}?sslmode={sslMode}",
+    "uri": "postgresql://${PGUSER}:${PGPASSWORD}@{host}:{port}/{dbName}?sslmode={sslMode}",
     "uriLabel": "Connection URI",
     "env": [
       {
@@ -84,15 +109,15 @@
       },
       {
         "name": "PGDATABASE",
-        "from": "database"
-      },
-      {
-        "name": "PGUSER",
-        "from": "user"
+        "from": "dbName"
       },
       {
         "name": "PGSSLMODE",
         "from": "sslMode"
+      },
+      {
+        "name": "PGUSER",
+        "secretField": "username"
       },
       {
         "name": "PGPASSWORD",

@@ -109,10 +109,12 @@ func TestValidateAcceptsAWellFormedPayload(t *testing.T) {
 	catalog := newTestCatalog(t)
 
 	err := catalog.Validate("postgresql", map[string]any{
+		"engine":   "postgresql",
+		"driver":   "org.postgresql.Driver",
 		"host":     "db.example.com",
 		"port":     float64(5432),
-		"database": "analytics",
-		"user":     "reader",
+		"dbName":   "analytics",
+		"username": "reader",
 		"password": "s3cret",
 		"sslMode":  "require",
 	})
@@ -125,10 +127,12 @@ func TestValidateRejectsBadPayloads(t *testing.T) {
 
 	base := func() map[string]any {
 		return map[string]any{
+			"engine":   "postgresql",
+			"driver":   "org.postgresql.Driver",
 			"host":     "db.example.com",
 			"port":     float64(5432),
-			"database": "analytics",
-			"user":     "reader",
+			"dbName":   "analytics",
+			"username": "reader",
 			"password": "s3cret",
 			"sslMode":  "require",
 		}

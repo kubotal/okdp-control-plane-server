@@ -83,7 +83,13 @@ type ConnectionEnvSpec struct {
 // values, the recognition of deployed services as connection providers, and
 // the ready-to-use snippets shown when a connection is opened.
 type ConnectionType struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Interface names the KuboCD Interface this type produces, which is the
+	// contract of record and what a package's connectionRef asks for. Several
+	// types may produce the same one: PostgreSQL and MySQL are two entry forms,
+	// with their own defaults, ports and service discovery, for the single
+	// database-server contract. Empty means the type name is the interface name.
+	Interface   string `json:"interface,omitempty"`
 	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
@@ -265,4 +271,13 @@ type SelectableConnection struct {
 	Managed     bool   `json:"managed"`
 	// ProvidedBy names the release publishing a managed connection.
 	ProvidedBy string `json:"providedBy,omitempty"`
+}
+
+// InterfaceName is the KuboCD Interface a connection of this type declares, that
+// is what lands in spec.interface and what a package's connectionRef matches.
+func (t ConnectionType) InterfaceName() string {
+	if t.Interface != "" {
+		return t.Interface
+	}
+	return t.Name
 }

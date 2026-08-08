@@ -292,12 +292,6 @@ func (s *DefaultServiceService) DeployService(ctx context.Context, project strin
 		return nil, fmt.Errorf("failed to resolve ingress suffix: %w", err)
 	}
 
-	if s.contextWriteRepo != nil {
-		if err := s.contextWriteRepo.SyncFromDefault(ctx, project); err != nil {
-			logrus.WithError(err).WithField("project", project).Warn("Failed to sync project Context from default")
-		}
-	}
-
 	instanceName := req.InstanceName
 	if instanceName == "" {
 		instanceName = req.Service
@@ -328,9 +322,9 @@ func (s *DefaultServiceService) DeployService(ctx context.Context, project strin
 				Insecure:   insecureOCIHost(packageRepo, s.insecureRegistries),
 			},
 			Parameters: req.Parameters,
-			Contexts: []crd.ContextRef{
-				{Name: project, Namespace: s.contextNamespace},
-			},
+			// No explicit Contexts. KuboCD merges Config.defaultContexts, then the
+			// optional Context named by Config.defaultNamespaceContexts looked up in
+			// this Release's namespace. A project overriding nothing needs no object.
 			TargetNamespace: project,
 			CreateNamespace: false,
 		},

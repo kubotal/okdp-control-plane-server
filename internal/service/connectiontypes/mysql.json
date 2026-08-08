@@ -1,11 +1,35 @@
 {
   "name": "mysql",
-  "displayName": "MySQL / MariaDB",
+  "interface": "database-server",
+  "displayName": "MySQL",
   "description": "MySQL or MariaDB database server.",
   "icon": "pi pi-database",
   "category": "database",
   "external": true,
   "fields": [
+    {
+      "name": "engine",
+      "label": "Engine",
+      "type": "enum",
+      "required": true,
+      "default": "mysql",
+      "options": [
+        "mysql"
+      ],
+      "help": "Read by consuming packages to build their JDBC URL. Fixed for this type."
+    },
+    {
+      "name": "driver",
+      "label": "JDBC driver",
+      "type": "enum",
+      "required": true,
+      "default": "com.mysql.cj.jdbc.Driver",
+      "options": [
+        "com.mysql.cj.jdbc.Driver",
+        "org.mariadb.jdbc.Driver"
+      ],
+      "help": "Driver class name, read by packages that configure a JDBC datasource. MariaDB servers usually take the MariaDB driver."
+    },
     {
       "name": "host",
       "label": "Host",
@@ -23,16 +47,19 @@
       "max": 65535
     },
     {
-      "name": "database",
+      "name": "dbName",
       "label": "Database",
       "type": "string",
-      "required": true
+      "required": true,
+      "placeholder": "analytics"
     },
     {
-      "name": "user",
+      "name": "username",
       "label": "User",
       "type": "string",
-      "required": true
+      "required": true,
+      "secret": true,
+      "help": "Stored in the credentials Secret, under the username key, as the database-server contract expects."
     },
     {
       "name": "password",
@@ -53,7 +80,7 @@
         "true",
         "skip-verify"
       ],
-      "help": "'preferred' uses TLS when the server offers it; 'true' requires it and validates the certificate."
+      "help": "'preferred' uses TLS when the server offers it, 'true' requires it and validates the certificate."
     }
   ],
   "providers": {
@@ -69,7 +96,7 @@
     "defaultPort": 3306
   },
   "usage": {
-    "uri": "mysql://{user}:${MYSQL_PWD}@{host}:{port}/{database}",
+    "uri": "mysql://${MYSQL_USER}:${MYSQL_PWD}@{host}:{port}/{dbName}",
     "uriLabel": "Connection URI",
     "env": [
       {
@@ -82,11 +109,11 @@
       },
       {
         "name": "MYSQL_DATABASE",
-        "from": "database"
+        "from": "dbName"
       },
       {
         "name": "MYSQL_USER",
-        "from": "user"
+        "secretField": "username"
       },
       {
         "name": "MYSQL_PWD",

@@ -5,7 +5,6 @@ import (
 
 	"github.com/okdp/okdp-server-new/internal/models"
 	"github.com/okdp/okdp-server-new/internal/repository"
-	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -43,36 +42,25 @@ func (s *DefaultProjectService) GetProject(ctx context.Context, name string) (*m
 	return s.repo.Get(ctx, name)
 }
 
-// CreateProject creates a new project (backed by a Kubernetes Namespace) and
-// provisions its per-project Context CR cloned from the default one.
+// CreateProject creates a new project, backed by a Kubernetes Namespace.
+//
+// No Context is created for the project. KuboCD resolves an optional Context by
+// name in the namespace of each Release, through Config.defaultNamespaceContexts,
+// so a project that overrides nothing needs no object at all. A project that
+// does override something declares its own Context, and it survives.
 func (s *DefaultProjectService) CreateProject(ctx context.Context, project *models.Project) error {
-	if err := s.repo.Create(ctx, project); err != nil {
-		return err
-	}
-
-	if s.contextWriteRepo != nil {
-		if err := s.contextWriteRepo.CreateFromDefault(ctx, project.Name); err != nil {
-			logrus.WithError(err).WithField("project", project.Name).Warn("Failed to create per-project Context (project was created)")
-		}
-	}
-
-	return nil
+	return s.repo.Create(ctx, project)
 }
 
 // UpdateProject updates a project's mutable metadata (its description) on the
-// backing Namespace. The per-project Context CR is unaffected.
+// backing Namespace.
 func (s *DefaultProjectService) UpdateProject(ctx context.Context, project *models.Project) (*models.Project, error) {
 	return s.repo.Update(ctx, project)
 }
 
-// DeleteProject deletes a project (its Namespace) and its per-project Context CR.
+// DeleteProject deletes a project, that is its Namespace. A Context the project
+// may have declared lives in that namespace and goes with it.
 func (s *DefaultProjectService) DeleteProject(ctx context.Context, name string) error {
-	if s.contextWriteRepo != nil {
-		if err := s.contextWriteRepo.Delete(ctx, name); err != nil {
-			logrus.WithError(err).WithField("project", name).Warn("Failed to delete per-project Context")
-		}
-	}
-
 	return s.repo.Delete(ctx, name)
 }
 
