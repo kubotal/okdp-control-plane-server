@@ -56,7 +56,9 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		}
 
 		// Secret Stores (scoped per project namespace)
-		secretStores := api.Group("/projects/:name/secret-stores")
+		requireProject := middleware.RequireProject(projectHandler.Resolve)
+
+		secretStores := api.Group("/projects/:name/secret-stores", requireProject)
 		{
 			secretStores.GET("", secretStoreHandler.ListSecretStores)
 			secretStores.POST("", secretStoreHandler.CreateSecretStore)
@@ -67,7 +69,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		}
 
 		// External Secrets (scoped per project namespace)
-		externalSecrets := api.Group("/projects/:name/external-secrets")
+		externalSecrets := api.Group("/projects/:name/external-secrets", requireProject)
 		{
 			externalSecrets.GET("", externalSecretHandler.ListExternalSecrets)
 			externalSecrets.POST("", externalSecretHandler.CreateExternalSecret)
@@ -82,7 +84,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 
 		// Connections (scoped per project namespace). "internal" lists what the
 		// project's deployed services expose; the rest are user-declared.
-		connections := api.Group("/projects/:name/connections")
+		connections := api.Group("/projects/:name/connections", requireProject)
 		{
 			connections.GET("", connectionHandler.ListConnections)
 			connections.GET("/internal", connectionHandler.ListInternalConnections)
@@ -114,7 +116,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		api.GET("/profile-images", serviceHandler.GetProfileImages)
 
 		// Deployed services per project (KuboCD Releases)
-		services := api.Group("/projects/:name/services")
+		services := api.Group("/projects/:name/services", requireProject)
 		{
 			services.GET("", serviceHandler.ListServices)
 			services.GET("/stream", serviceHandler.StreamServices)
@@ -135,7 +137,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		api.GET("/spark-app-schema", sparkHandler.GetSparkAppSchema)
 
 		// SparkApplications per project
-		sparkApps := api.Group("/projects/:name/spark-apps")
+		sparkApps := api.Group("/projects/:name/spark-apps", requireProject)
 		{
 			sparkApps.GET("", sparkHandler.ListSparkApps)
 			sparkApps.GET("/stream", sparkHandler.StreamSparkApps)
