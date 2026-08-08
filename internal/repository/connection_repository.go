@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -40,6 +41,10 @@ type ConnectionRepository interface {
 
 	CreateOrUpdateSecret(ctx context.Context, namespace, name string, data map[string][]byte) error
 	DeleteSecret(ctx context.Context, namespace, name string) error
+	// SecretKeys returns the keys a Secret carries, so a connection pointed at
+	// an existing one can be checked before it is stored. Returns false when the
+	// Secret does not exist.
+	SecretKeys(ctx context.Context, namespace, name string) ([]string, bool, error)
 }
 
 // crdAvailabilityTTL bounds how long a negative probe is trusted, so that
@@ -201,6 +206,29 @@ func (r *k8sConnectionRepository) Delete(ctx context.Context, namespace, name st
 }
 
 // --- Kubernetes Secrets holding the credentials ---
+
+func (r *k8sConnectionRepository) SecretKeys(ctx context.Context, namespace, name string) ([]string, bool, error) {
+	if namespace == "" {
+		return nil, false, fmt.Errorf("a namespace is required to read credentials")
+	}
+
+	secret, err := r.typedClient.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	// Only the key names are read, never the values: the console must be able to
+	// say a Secret carries what a contract needs without ever holding it.
+	keys := make([]string, 0, len(secret.Data))
+	for key := range secret.Data {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys, true, nil
+}
 
 func (r *k8sConnectionRepository) CreateOrUpdateSecret(ctx context.Context, namespace, name string, data map[string][]byte) error {
 	if namespace == "" {

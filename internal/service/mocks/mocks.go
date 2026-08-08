@@ -462,6 +462,15 @@ func (m *ConnectionRepository) DeleteSecret(ctx context.Context, namespace, name
 	return args.Error(0)
 }
 
+func (m *ConnectionRepository) SecretKeys(ctx context.Context, namespace, name string) ([]string, bool, error) {
+	args := m.Called(ctx, namespace, name)
+	var keys []string
+	if raw := args.Get(0); raw != nil {
+		keys = raw.([]string)
+	}
+	return keys, args.Bool(1), args.Error(2)
+}
+
 func (m *ConnectionRepository) ListKubeServices(ctx context.Context, namespace string) ([]corev1.Service, error) {
 	args := m.Called(ctx, namespace)
 	if args.Get(0) == nil {

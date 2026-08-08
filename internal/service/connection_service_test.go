@@ -494,3 +494,76 @@ func TestTestNormalizesBeforeValidating(t *testing.T) {
 	assert.NotEqual(t, models.TestReasonInvalidConfig, result.Reason,
 		"the payload is complete once normalized, the failure must come from the network")
 }
+
+// --- Pointing at a Secret the console does not own ---
+
+// Credentials increasingly arrive in the namespace on their own, projected from
+// a vault by External Secrets. A connection must be able to name one instead of
+// handing its password to a form.
+func TestCreateCanPointAtAnExistingSecret(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("SecretKeys", mock.Anything, "demo", "warehouse-from-vault").
+		Return([]string{"password", "username"}, true, nil)
+	connectionRepo.On("Create", mock.Anything, "demo", mock.Anything).Return(nil)
+
+	req := postgresRequest()
+	req.ExistingSecret = "warehouse-from-vault"
+	delete(req.Values, "username")
+	delete(req.Values, "password")
+
+	_, err := svc.Create(context.Background(), "demo", req)
+
+	require.NoError(t, err)
+	// The Secret belongs to somebody else: writing it would overwrite what the
+	// vault projected.
+	connectionRepo.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	call := findCall(connectionRepo, "Create")
+	require.NotNil(t, call)
+	stored := call.Arguments.Get(2).(*crd.Connection)
+	assert.Equal(t, "warehouse-from-vault", stored.Spec.Values["secretRef"],
+		"consumers bind the Secret through this name")
+}
+
+// A connection pointing at a Secret that is absent, or that does not carry what
+// the contract needs, looks healthy and fails at pod start with
+// CreateContainerConfigError, far from the form that caused it.
+func TestCreateRefusesASecretThatCannotWork(t *testing.T) {
+	tests := []struct {
+		name    string
+		keys    []string
+		found   bool
+		message string
+	}{
+		{
+			name:    "secret does not exist",
+			found:   false,
+			message: `no secret named "warehouse-from-vault"`,
+		},
+		{
+			name:    "secret is missing a key the contract needs",
+			keys:    []string{"username"},
+			found:   true,
+			message: "does not carry the keys the database-server contract needs: password",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, connectionRepo, _ := newServiceUnderTest(t, true)
+			connectionRepo.On("SecretKeys", mock.Anything, "demo", "warehouse-from-vault").
+				Return(tt.keys, tt.found, nil)
+
+			req := postgresRequest()
+			req.ExistingSecret = "warehouse-from-vault"
+
+			_, err := svc.Create(context.Background(), "demo", req)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.message)
+			assert.True(t, IsValidationError(err), "must reach the caller as a 400")
+			connectionRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything)
+		})
+	}
+}

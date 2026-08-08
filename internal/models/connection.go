@@ -139,6 +139,12 @@ type ConnectionRequest struct {
 	Type        string         `json:"type" binding:"required"`
 	Description string         `json:"description,omitempty"`
 	Values      map[string]any `json:"values" binding:"required"`
+	// ExistingSecret names a Secret already present in the namespace, holding
+	// the credentials of this connection. When it is set the server stores no
+	// credential of its own: the Secret may come from anywhere, typically
+	// projected from a vault by External Secrets, and the connection only
+	// points at it. The credential fields of the payload are then ignored.
+	ExistingSecret string `json:"existingSecret,omitempty"`
 }
 
 // ConnectionTestRequest is the body of a connectivity test. It carries no name:

@@ -145,7 +145,7 @@ func (s *DefaultConnectionService) List(ctx context.Context, namespace string) (
 }
 
 func (s *DefaultConnectionService) Create(ctx context.Context, namespace string, req models.ConnectionRequest) (*models.ConnectionResponse, error) {
-	connectionType, values, err := s.validateRequest(ctx, req, false)
+	connectionType, values, err := s.validateRequest(ctx, namespace, req, false)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +153,15 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 	public, secrets := splitValues(connectionType, values)
 	secretNamespace := s.credentialsNamespace(namespace)
 	secretName := req.Name + credentialsSecretSuffix
+	ownSecret := req.ExistingSecret == ""
 
-	if len(secrets) > 0 {
+	if !ownSecret {
+		// Pointing at a Secret somebody else owns: nothing is written, and the
+		// credential fields of the payload are ignored on purpose.
+		secretName = req.ExistingSecret
+		secrets = nil
+		public[valueSecretRef] = secretName
+	} else if len(secrets) > 0 {
 		if err := s.repo.CreateOrUpdateSecret(ctx, secretNamespace, secretName, secrets); err != nil {
 			return nil, fmt.Errorf("failed to store the credentials: %w", err)
 		}
@@ -178,7 +185,7 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 			Values:      public,
 		},
 	}
-	if len(secrets) > 0 {
+	if len(secrets) > 0 || !ownSecret {
 		connection.Annotations = map[string]string{
 			AnnotationCredentialsSecret: secretNamespace + "/" + secretName,
 		}
@@ -186,7 +193,8 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 
 	if err := s.repo.Create(ctx, namespace, connection); err != nil {
 		// Leave no orphan Secret behind when the Connection itself is refused.
-		if len(secrets) > 0 {
+		// A Secret we do not own is never touched.
+		if ownSecret && len(secrets) > 0 {
 			if cleanupErr := s.repo.DeleteSecret(ctx, secretNamespace, secretName); cleanupErr != nil {
 				logrus.WithError(cleanupErr).Warn("Failed to clean up the credentials secret of a rejected connection")
 			}
@@ -200,7 +208,7 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 
 func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name string, req models.ConnectionRequest) (*models.ConnectionResponse, error) {
 	req.Name = name
-	connectionType, values, err := s.validateRequest(ctx, req, true)
+	connectionType, values, err := s.validateRequest(ctx, namespace, req, true)
 	if err != nil {
 		return nil, err
 	}
@@ -217,14 +225,19 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 	secretNamespace := s.credentialsNamespace(namespace)
 	secretName := name + credentialsSecretSuffix
 
-	// An unchanged credential is not resubmitted by the console, so only write
-	// the Secret when new values actually arrived — otherwise an edit of, say,
-	// the port would blank out the password.
-	if len(secrets) > 0 {
+	if req.ExistingSecret != "" {
+		// Switched to, or kept on, a Secret owned elsewhere.
+		public[valueSecretRef] = req.ExistingSecret
+		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+req.ExistingSecret)
+	} else if len(secrets) > 0 {
+		// An unchanged credential is not resubmitted by the console, so only
+		// write the Secret when new values actually arrived, otherwise an edit
+		// of, say, the port would blank out the password.
 		if err := s.repo.CreateOrUpdateSecret(ctx, secretNamespace, secretName, secrets); err != nil {
 			return nil, fmt.Errorf("failed to store the credentials: %w", err)
 		}
 		public[valueSecretRef] = secretName
+		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+secretName)
 	} else {
 		// The credentials did not change, so neither do the fields describing
 		// them — and they must be carried over: splitValues rebuilt the values
@@ -398,7 +411,7 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 // should be stored: derived fields filled, fields put out of play by the
 // submitted engine dropped. On an edit, credentials that were not resubmitted
 // are kept as they are rather than reported as missing.
-func (s *DefaultConnectionService) validateRequest(ctx context.Context, req models.ConnectionRequest, isUpdate bool) (*models.ConnectionType, map[string]any, error) {
+func (s *DefaultConnectionService) validateRequest(ctx context.Context, namespace string, req models.ConnectionRequest, isUpdate bool) (*models.ConnectionType, map[string]any, error) {
 	if !s.repo.Available(ctx) {
 		return nil, nil, ErrConnectionsUnavailable
 	}
@@ -418,10 +431,54 @@ func (s *DefaultConnectionService) validateRequest(ctx context.Context, req mode
 	if isUpdate {
 		validateValues = s.catalog.ValidateUpdate
 	}
+	if req.ExistingSecret != "" {
+		// The credentials live in a Secret we do not own, so the payload is not
+		// expected to carry them: validate as an edit, which tolerates that.
+		validateValues = s.catalog.ValidateUpdate
+		if err := s.checkExistingSecret(ctx, namespace, req, connectionType); err != nil {
+			return nil, nil, err
+		}
+	}
 	if err := validateValues(req.Type, values); err != nil {
 		return nil, nil, invalid("%s", err.Error())
 	}
 	return connectionType, values, nil
+}
+
+// checkExistingSecret refuses a connection pointed at a Secret that is absent or
+// does not carry what the contract needs. Storing it anyway would produce a
+// connection that looks healthy and whose consumers fail at pod start with
+// CreateContainerConfigError, far from the form that caused it.
+func (s *DefaultConnectionService) checkExistingSecret(
+	ctx context.Context,
+	namespace string,
+	req models.ConnectionRequest,
+	connectionType *models.ConnectionType,
+) error {
+	secretNamespace := s.credentialsNamespace(namespace)
+	keys, found, err := s.repo.SecretKeys(ctx, secretNamespace, req.ExistingSecret)
+	if err != nil {
+		return fmt.Errorf("failed to read the secret %q: %w", req.ExistingSecret, err)
+	}
+	if !found {
+		return invalid("no secret named %q in namespace %q", req.ExistingSecret, secretNamespace)
+	}
+
+	present := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		present[key] = true
+	}
+	var missing []string
+	for _, field := range connectionType.SecretFields() {
+		if !present[field] {
+			missing = append(missing, field)
+		}
+	}
+	if len(missing) > 0 {
+		return invalid("secret %q does not carry the keys the %s contract needs: %s",
+			req.ExistingSecret, connectionType.Name, strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // credentialsNamespace returns where the Secret of a connection lives. Platform
@@ -593,4 +650,14 @@ func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, interfac
 		return fmt.Sprintf("%s:%d", host, int32(port))
 	}
 	return host
+}
+
+// withCredentialsSecret records where a connection's credentials live, without
+// dropping the other annotations.
+func withCredentialsSecret(annotations map[string]string, reference string) map[string]string {
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[AnnotationCredentialsSecret] = reference
+	return annotations
 }
