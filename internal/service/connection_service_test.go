@@ -637,3 +637,110 @@ func TestListConsumersMatchesAPlatformConnection(t *testing.T) {
 	require.Len(t, consumers, 1)
 	assert.Equal(t, "superset", consumers[0].Service)
 }
+
+// The panel says where the credentials come from, because the two cases behave
+// differently: deleting a connection removes a Secret the console wrote, and
+// leaves an external one alone. Reading the Secret back to find out would cost
+// one API call per connection in a list, so the answer is written down when the
+// connection is created.
+func TestResponseSaysWhetherTheConsoleOwnsTheSecret(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		connection  string
+		wantOwned   bool
+	}{
+		{
+			name: "written by the console",
+			annotations: map[string]string{
+				AnnotationCredentialsSecret: "demo/warehouse-credentials",
+				AnnotationCredentialsOwned:  "true",
+			},
+			connection: "warehouse",
+			wantOwned:  true,
+		},
+		{
+			name: "pointing at a secret from elsewhere",
+			annotations: map[string]string{
+				AnnotationCredentialsSecret: "demo/from-vault",
+				AnnotationCredentialsOwned:  "false",
+			},
+			connection: "warehouse",
+			wantOwned:  false,
+		},
+		{
+			// Created before the annotation existed: the naming convention is
+			// the only clue, and it is what the console itself assumed.
+			name:        "older connection, no annotation",
+			annotations: map[string]string{AnnotationCredentialsSecret: "demo/warehouse-credentials"},
+			connection:  "warehouse",
+			wantOwned:   true,
+		},
+		{
+			name:        "older connection pointing elsewhere",
+			annotations: map[string]string{AnnotationCredentialsSecret: "demo/shared-db-secret"},
+			connection:  "warehouse",
+			wantOwned:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _, _ := newServiceUnderTest(t, true)
+			connection := &crd.Connection{
+				ObjectMeta: metav1.ObjectMeta{Name: tt.connection, Annotations: tt.annotations},
+				Spec:       crd.ConnectionSpec{Interface: "database-server"},
+			}
+
+			response := svc.toResponse(connection, "demo")
+
+			require.NotNil(t, response.CredentialsSecret)
+			assert.Equal(t, tt.wantOwned, response.CredentialsSecret.Owned)
+		})
+	}
+}
+
+// The panel tells the user an external Secret stays when the connection goes.
+// It only did so because the name did not match the convention: Delete removed
+// `<connection>-credentials` whatever it was. A vault-projected Secret named
+// that way would have been destroyed, taking the credentials of everything else
+// reading it.
+func TestDeleteLeavesASecretItDoesNotOwn(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(&crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "warehouse",
+			Annotations: map[string]string{
+				// Named exactly as the console would have named its own.
+				AnnotationCredentialsSecret: "demo/warehouse-credentials",
+				AnnotationCredentialsOwned:  "false",
+			},
+		},
+	}, nil)
+	connectionRepo.On("Delete", mock.Anything, "demo", "warehouse").Return(nil)
+
+	require.NoError(t, svc.Delete(context.Background(), "demo", "warehouse"))
+
+	connectionRepo.AssertNotCalled(t, "DeleteSecret", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestDeleteRemovesTheSecretItWrote(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(&crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "warehouse",
+			Annotations: map[string]string{
+				AnnotationCredentialsSecret: "demo/warehouse-credentials",
+				AnnotationCredentialsOwned:  "true",
+			},
+		},
+	}, nil)
+	connectionRepo.On("Delete", mock.Anything, "demo", "warehouse").Return(nil)
+	connectionRepo.On("DeleteSecret", mock.Anything, "demo", "warehouse-credentials").Return(nil)
+
+	require.NoError(t, svc.Delete(context.Background(), "demo", "warehouse"))
+
+	connectionRepo.AssertCalled(t, "DeleteSecret", mock.Anything, "demo", "warehouse-credentials")
+}

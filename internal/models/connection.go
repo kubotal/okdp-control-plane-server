@@ -185,6 +185,10 @@ type CredentialsSecretRef struct {
 	Name      string   `json:"name"`
 	Namespace string   `json:"namespace,omitempty"`
 	Keys      []string `json:"keys,omitempty"`
+	// Owned reports that the console wrote this Secret, as opposed to pointing
+	// at one that was already there, typically projected from a vault. The two
+	// behave differently on edit and on delete, so the panel says which it is.
+	Owned bool `json:"owned"`
 }
 
 // ConnectionResponse is an external connection as returned by the API. The

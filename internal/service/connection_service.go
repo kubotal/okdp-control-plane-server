@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,13 @@ import (
 // stays exactly the shape a KuboCD Interface schema will validate, and so that
 // reading a Connection never discloses a password.
 const AnnotationCredentialsSecret = "okdp.io/credentials-secret"
+
+// AnnotationCredentialsOwned records whether the console wrote that Secret or
+// merely points at one. Written at creation rather than derived later: reading
+// the Secret back would cost one API call per connection in a list, and the
+// name alone cannot tell, an external Secret being free to follow the same
+// convention.
+const AnnotationCredentialsOwned = "okdp.io/credentials-owned"
 
 // credentialsSecretSuffix mirrors the convention already used by secret stores.
 const credentialsSecretSuffix = "-credentials"
@@ -192,6 +200,7 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 	if len(secrets) > 0 || !ownSecret {
 		connection.Annotations = map[string]string{
 			AnnotationCredentialsSecret: secretNamespace + "/" + secretName,
+			AnnotationCredentialsOwned:  strconv.FormatBool(ownSecret),
 		}
 	}
 
@@ -232,7 +241,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 	if req.ExistingSecret != "" {
 		// Switched to, or kept on, a Secret owned elsewhere.
 		public[valueSecretRef] = req.ExistingSecret
-		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+req.ExistingSecret)
+		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+req.ExistingSecret, false)
 	} else if len(secrets) > 0 {
 		// An unchanged credential is not resubmitted by the console, so only
 		// write the Secret when new values actually arrived, otherwise an edit
@@ -241,7 +250,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 			return nil, fmt.Errorf("failed to store the credentials: %w", err)
 		}
 		public[valueSecretRef] = secretName
-		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+secretName)
+		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+secretName, true)
 	} else {
 		// The credentials did not change, so neither do the fields describing
 		// them — and they must be carried over: splitValues rebuilt the values
@@ -282,12 +291,36 @@ func (s *DefaultConnectionService) Delete(ctx context.Context, namespace, name s
 		return err
 	}
 
+	// Only a Secret this server wrote is removed with the connection. One that
+	// was already there, projected from a vault, belongs to whoever put it
+	// there: deleting it would take the credentials of everything else reading
+	// it. The name is no guide, an external Secret being free to follow the same
+	// convention, so this reads what was recorded at creation.
+	secretName, owned := credentialsSecretOf(existing, name)
+	if !owned {
+		logrus.WithField("secret", secretName).
+			Info("Leaving the credentials secret in place, the connection did not own it")
+		return nil
+	}
+
 	// The Secret outlives the Connection only if this fails; report nothing to
 	// the user for it, the connection itself is gone.
-	if err := s.repo.DeleteSecret(ctx, s.credentialsNamespace(namespace), name+credentialsSecretSuffix); err != nil {
+	if err := s.repo.DeleteSecret(ctx, s.credentialsNamespace(namespace), secretName); err != nil {
 		logrus.WithError(err).Warn("Failed to delete the credentials secret of a removed connection")
 	}
 	return nil
+}
+
+// credentialsSecretOf returns the Secret holding a connection's credentials and
+// whether this server wrote it.
+func credentialsSecretOf(connection *crd.Connection, name string) (string, bool) {
+	secretName := name + credentialsSecretSuffix
+	if ref := connection.Annotations[AnnotationCredentialsSecret]; ref != "" {
+		if _, referenced, found := strings.Cut(ref, "/"); found && referenced != "" {
+			secretName = referenced
+		}
+	}
+	return secretName, credentialsOwned(connection.Annotations, name, secretName)
 }
 
 func (s *DefaultConnectionService) Test(ctx context.Context, req models.ConnectionTestRequest) models.ConnectionTestResult {
@@ -562,6 +595,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 					Name:      name,
 					Namespace: ns,
 					Keys:      response.SecretFields,
+					Owned:     credentialsOwned(connection.Annotations, connection.Name, name),
 				}
 			}
 		}
@@ -666,11 +700,12 @@ func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, interfac
 
 // withCredentialsSecret records where a connection's credentials live, without
 // dropping the other annotations.
-func withCredentialsSecret(annotations map[string]string, reference string) map[string]string {
+func withCredentialsSecret(annotations map[string]string, reference string, owned bool) map[string]string {
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
 	annotations[AnnotationCredentialsSecret] = reference
+	annotations[AnnotationCredentialsOwned] = strconv.FormatBool(owned)
 	return annotations
 }
 
@@ -712,4 +747,15 @@ func referencesConnection(refs []crd.InputConnectionReference, project, name str
 		}
 	}
 	return false
+}
+
+// credentialsOwned reports whether the console wrote the credentials Secret.
+// Connections created before the annotation existed fall back on the naming
+// convention, which is what the console itself used to assume.
+func credentialsOwned(annotations map[string]string, connectionName, secretName string) bool {
+	if raw, present := annotations[AnnotationCredentialsOwned]; present {
+		owned, err := strconv.ParseBool(raw)
+		return err == nil && owned
+	}
+	return secretName == connectionName+credentialsSecretSuffix
 }
