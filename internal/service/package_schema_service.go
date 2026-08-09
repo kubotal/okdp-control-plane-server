@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -376,6 +377,10 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 		return nil, fmt.Errorf("kubocd dump timed out after %s for %s, the registry did not answer", dumpTimeout, ociRef)
 	}
 	if err != nil {
+		if stale := staleKubocd(string(output)); stale != "" {
+			logrus.WithField("ref", ociRef).Error(stale)
+			return nil, errors.New(stale)
+		}
 		logrus.WithError(err).WithField("output", string(output)).Error("kubocd dump failed")
 		return nil, fmt.Errorf("kubocd dump failed: %s", string(output))
 	}
@@ -638,4 +643,18 @@ func inputsFromMarkers(doc map[string]any) []models.PackageInput {
 	}
 	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Parameter < inputs[j].Parameter })
 	return inputs
+}
+
+// staleKubocd names the one failure that reads as a broken package but is a
+// broken server: a kubocd older than the package model it is asked to read.
+// The raw error blames the package, which sends the reader editing a file that
+// is fine.
+func staleKubocd(output string) string {
+	for _, unknown := range []string{"unknown type 'connectionRef'", `unknown field "outputs"`} {
+		if strings.Contains(output, unknown) {
+			return "the kubocd binary shipped with this server is older than the package it reads (" +
+				unknown + "). Rebuild the server image against a kubocd that supports the unified connections model."
+		}
+	}
+	return ""
 }
