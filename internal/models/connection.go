@@ -1,11 +1,9 @@
 package models
 
-// Connection scopes. A project connection lives in the project namespace; a
-// platform connection is cluster-wide and shared by every project.
-const (
-	ConnectionScopeProject  = "project"
-	ConnectionScopePlatform = "platform"
-)
+// ConnectionScopeProject is the only scope a connection has: it lives in the
+// namespace of the project that declares it. The cluster-wide scope was removed
+// on 2026-08-10, nothing consumed it and no ClusterConnection existed.
+const ConnectionScopeProject = "project"
 
 // Reasons returned by a connectivity test, so the console can tell a network
 // problem from a credential problem instead of showing a raw driver error.

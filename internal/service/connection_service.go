@@ -80,23 +80,20 @@ type ConnectionService interface {
 }
 
 type DefaultConnectionService struct {
-	repo              repository.ConnectionRepository
-	releaseRepo       repository.ServiceRepository
-	catalog           ConnectionTypeCatalog
-	platformNamespace string
+	repo        repository.ConnectionRepository
+	releaseRepo repository.ServiceRepository
+	catalog     ConnectionTypeCatalog
 }
 
 func NewDefaultConnectionService(
 	repo repository.ConnectionRepository,
 	releaseRepo repository.ServiceRepository,
 	catalog ConnectionTypeCatalog,
-	platformNamespace string,
 ) *DefaultConnectionService {
 	return &DefaultConnectionService{
-		repo:              repo,
-		releaseRepo:       releaseRepo,
-		catalog:           catalog,
-		platformNamespace: platformNamespace,
+		repo:        repo,
+		releaseRepo: releaseRepo,
+		catalog:     catalog,
 	}
 }
 
@@ -163,7 +160,7 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 	}
 
 	public, secrets := splitValues(connectionType, values)
-	secretNamespace := s.credentialsNamespace(namespace)
+	secretNamespace := namespace
 	secretName := req.Name + credentialsSecretSuffix
 	ownSecret := req.ExistingSecret == ""
 
@@ -235,7 +232,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 	}
 
 	public, secrets := splitValues(connectionType, values)
-	secretNamespace := s.credentialsNamespace(namespace)
+	secretNamespace := namespace
 	secretName := name + credentialsSecretSuffix
 
 	if req.ExistingSecret != "" {
@@ -305,7 +302,7 @@ func (s *DefaultConnectionService) Delete(ctx context.Context, namespace, name s
 
 	// The Secret outlives the Connection only if this fails; report nothing to
 	// the user for it, the connection itself is gone.
-	if err := s.repo.DeleteSecret(ctx, s.credentialsNamespace(namespace), secretName); err != nil {
+	if err := s.repo.DeleteSecret(ctx, namespace, secretName); err != nil {
 		logrus.WithError(err).Warn("Failed to delete the credentials secret of a removed connection")
 	}
 	return nil
@@ -500,7 +497,7 @@ func (s *DefaultConnectionService) checkExistingSecret(
 	req models.ConnectionRequest,
 	connectionType *models.ConnectionType,
 ) error {
-	secretNamespace := s.credentialsNamespace(namespace)
+	secretNamespace := namespace
 	keys, found, err := s.repo.SecretKeys(ctx, secretNamespace, req.ExistingSecret)
 	if err != nil {
 		return fmt.Errorf("failed to read the secret %q: %w", req.ExistingSecret, err)
@@ -529,13 +526,6 @@ func (s *DefaultConnectionService) checkExistingSecret(
 // credentialsNamespace returns where the Secret of a connection lives. Platform
 // connections are cluster-scoped and have no namespace of their own, so their
 // credentials go to the platform namespace.
-func (s *DefaultConnectionService) credentialsNamespace(namespace string) string {
-	if namespace == "" {
-		return s.platformNamespace
-	}
-	return namespace
-}
-
 // splitValues separates the values that go into the Connection spec from the
 // credentials, which are stored in a Secret instead.
 func splitValues(connectionType *models.ConnectionType, values map[string]any) (map[string]any, map[string][]byte) {
@@ -559,11 +549,6 @@ func splitValues(connectionType *models.ConnectionType, values map[string]any) (
 }
 
 func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namespace string) models.ConnectionResponse {
-	scope := models.ConnectionScopeProject
-	if namespace == "" {
-		scope = models.ConnectionScopePlatform
-	}
-
 	// The type name is the interface name: one type, one contract. The label
 	// that used to carry the type separately is gone, and reading it would only
 	// resurrect the names of types that no longer exist.
@@ -577,7 +562,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 	response := models.ConnectionResponse{
 		Name:        connection.Name,
 		Type:        connectionTypeName,
-		Scope:       scope,
+		Scope:       models.ConnectionScopeProject,
 		Namespace:   namespace,
 		Description: connection.Spec.Description,
 		Status:      connection.Status.Phase,
@@ -642,7 +627,7 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 			}
 			result = append(result, models.SelectableConnection{
 				Name:        connection.Name,
-				Scope:       scope,
+				Scope:       models.ConnectionScopeProject,
 				Type:        connection.Spec.Interface,
 				Status:      connection.Status.Phase,
 				Description: connection.Spec.Description,
@@ -657,14 +642,6 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 		return nil, err
 	}
 	collect(projectConnections, models.ConnectionScopeProject)
-
-	// Platform-wide connections are shared by every project; a failure to list
-	// them must not hide the project's own.
-	if platformConnections, err := s.repo.List(ctx, ""); err == nil {
-		collect(platformConnections, models.ConnectionScopePlatform)
-	} else {
-		logrus.WithError(err).Warn("Failed to list platform connections; offering project ones only")
-	}
 
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil

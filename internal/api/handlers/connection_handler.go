@@ -28,12 +28,6 @@ func projectNamespace(c *gin.Context) string {
 	return c.Param("name")
 }
 
-// platformNamespace is the empty namespace that addresses the cluster-wide
-// scope, per the ConnectionService contract.
-func platformNamespace(*gin.Context) string {
-	return ""
-}
-
 // GetConnectionTypes godoc
 // @Summary      List the available connection types
 // @Description  Descriptors of every connection type, used to build the creation form, plus whether connections can currently be persisted
@@ -56,17 +50,6 @@ func (h *ConnectionHandler) GetConnectionTypes(c *gin.Context) {
 // @Router       /api/projects/{projectId}/connections [get]
 func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 	h.list(c, projectNamespace(c))
-}
-
-// ListPlatformConnections godoc
-// @Summary      List the platform-wide connections
-// @Tags         connections
-// @Produce      json
-// @Success      200  {array}   models.ConnectionResponse
-// @Failure      500  {object}  map[string]string
-// @Router       /api/platform-connections [get]
-func (h *ConnectionHandler) ListPlatformConnections(c *gin.Context) {
-	h.list(c, platformNamespace(c))
 }
 
 func (h *ConnectionHandler) list(c *gin.Context, namespace string) {
@@ -157,21 +140,6 @@ func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 	h.create(c, projectNamespace(c))
 }
 
-// CreatePlatformConnection godoc
-// @Summary      Create a platform-wide connection
-// @Tags         connections
-// @Accept       json
-// @Produce      json
-// @Param        request body models.ConnectionRequest true "Connection"
-// @Success      201  {object}  models.ConnectionResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      409  {object}  map[string]string
-// @Failure      501  {object}  map[string]string
-// @Router       /api/platform-connections [post]
-func (h *ConnectionHandler) CreatePlatformConnection(c *gin.Context) {
-	h.create(c, platformNamespace(c))
-}
-
 func (h *ConnectionHandler) create(c *gin.Context, namespace string) {
 	var req models.ConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -210,22 +178,6 @@ func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 	h.update(c, projectNamespace(c))
 }
 
-// UpdatePlatformConnection godoc
-// @Summary      Update a platform-wide connection
-// @Tags         connections
-// @Accept       json
-// @Produce      json
-// @Param        connName path string true "Connection name"
-// @Param        request body models.ConnectionRequest true "Connection"
-// @Success      200  {object}  models.ConnectionResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      501  {object}  map[string]string
-// @Router       /api/platform-connections/{connName} [put]
-func (h *ConnectionHandler) UpdatePlatformConnection(c *gin.Context) {
-	h.update(c, platformNamespace(c))
-}
-
 func (h *ConnectionHandler) update(c *gin.Context, namespace string) {
 	var req models.ConnectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -256,19 +208,6 @@ func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 	h.delete(c, projectNamespace(c))
 }
 
-// DeletePlatformConnection godoc
-// @Summary      Delete a platform-wide connection
-// @Tags         connections
-// @Produce      json
-// @Param        connName path string true "Connection name"
-// @Success      204
-// @Failure      404  {object}  map[string]string
-// @Failure      501  {object}  map[string]string
-// @Router       /api/platform-connections/{connName} [delete]
-func (h *ConnectionHandler) DeletePlatformConnection(c *gin.Context) {
-	h.delete(c, platformNamespace(c))
-}
-
 func (h *ConnectionHandler) delete(c *gin.Context, namespace string) {
 	if err := h.service.Delete(c.Request.Context(), namespace, c.Param("connName")); err != nil {
 		h.writeError(c, err, "Failed to delete connection")
@@ -289,19 +228,6 @@ func (h *ConnectionHandler) delete(c *gin.Context, namespace string) {
 // @Failure      400  {object}  map[string]string
 // @Router       /api/projects/{projectId}/connections/test [post]
 func (h *ConnectionHandler) TestConnection(c *gin.Context) {
-	h.test(c)
-}
-
-// TestPlatformConnection godoc
-// @Summary      Test a platform-wide connection from the platform
-// @Tags         connections
-// @Accept       json
-// @Produce      json
-// @Param        request body models.ConnectionTestRequest true "Connection settings to probe"
-// @Success      200  {object}  models.ConnectionTestResult
-// @Failure      400  {object}  map[string]string
-// @Router       /api/platform-connections/test [post]
-func (h *ConnectionHandler) TestPlatformConnection(c *gin.Context) {
 	h.test(c)
 }
 

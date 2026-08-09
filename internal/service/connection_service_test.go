@@ -14,8 +14,6 @@ import (
 	"github.com/okdp/okdp-server-new/internal/service/mocks"
 )
 
-const testPlatformNamespace = "okdp-system"
-
 func newServiceUnderTest(t *testing.T, crdAvailable bool) (*DefaultConnectionService, *mocks.ConnectionRepository, *mocks.ServiceRepository) {
 	t.Helper()
 
@@ -26,7 +24,7 @@ func newServiceUnderTest(t *testing.T, crdAvailable bool) (*DefaultConnectionSer
 	catalog, err := NewEmbeddedConnectionTypeCatalog()
 	require.NoError(t, err)
 
-	return NewDefaultConnectionService(connectionRepo, releaseRepo, catalog, testPlatformNamespace), connectionRepo, releaseRepo
+	return NewDefaultConnectionService(connectionRepo, releaseRepo, catalog), connectionRepo, releaseRepo
 }
 
 func postgresRequest() models.ConnectionRequest {
@@ -178,21 +176,6 @@ func TestUpdateWithNoCredentialAtAllLeavesTheSecretAlone(t *testing.T) {
 
 	require.NoError(t, err)
 	connectionRepo.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-}
-
-func TestPlatformConnectionsStoreTheirCredentialsInThePlatformNamespace(t *testing.T) {
-	svc, connectionRepo, _ := newServiceUnderTest(t, true)
-
-	connectionRepo.On("CreateOrUpdateSecret", mock.Anything, testPlatformNamespace, "warehouse-credentials", mock.Anything).Return(nil)
-	connectionRepo.On("Create", mock.Anything, "", mock.Anything).Return(nil)
-
-	// An empty namespace addresses the cluster-wide scope, which has no
-	// namespace of its own to hold a Secret.
-	response, err := svc.Create(context.Background(), "", postgresRequest())
-
-	require.NoError(t, err)
-	assert.Equal(t, models.ConnectionScopePlatform, response.Scope)
-	connectionRepo.AssertCalled(t, "CreateOrUpdateSecret", mock.Anything, testPlatformNamespace, "warehouse-credentials", mock.Anything)
 }
 
 // --- Validation ---

@@ -96,16 +96,6 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 			connections.DELETE("/:connName", connectionHandler.DeleteConnection)
 		}
 
-		// Platform-wide connections, shared by every project (admin)
-		platformConnections := api.Group("/platform-connections")
-		{
-			platformConnections.GET("", connectionHandler.ListPlatformConnections)
-			platformConnections.POST("", connectionHandler.CreatePlatformConnection)
-			platformConnections.POST("/test", connectionHandler.TestPlatformConnection)
-			platformConnections.PUT("/:connName", connectionHandler.UpdatePlatformConnection)
-			platformConnections.DELETE("/:connName", connectionHandler.DeletePlatformConnection)
-		}
-
 		// Platform services (managed OKDP services)
 		api.GET("/platform-services", serviceHandler.GetPlatformServices)
 		api.POST("/platform-services", serviceHandler.CreatePlatformService)

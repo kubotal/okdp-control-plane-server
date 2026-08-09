@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestListSelectableOffersProjectAndPlatformOfTheInterface(t *testing.T) {
+func TestListSelectableOffersTheProjectConnectionsOfTheInterface(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
@@ -33,22 +33,13 @@ func TestListSelectableOffersProjectAndPlatformOfTheInterface(t *testing.T) {
 			Spec:       crd.ConnectionSpec{Interface: "s3"},
 		},
 	}, nil)
-	connectionRepo.On("List", mock.Anything, "").Return([]crd.Connection{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "shared-pg"},
-			Spec:       crd.ConnectionSpec{Interface: "database-server"},
-			Status:     crd.ConnectionStatus{Phase: "READY"},
-		},
-	}, nil)
 
 	selectable, err := svc.ListSelectable(context.Background(), "demo", "database-server")
 
 	require.NoError(t, err)
-	require.Len(t, selectable, 2)
+	require.Len(t, selectable, 1, "only the connections of the project, of that interface")
 	assert.Equal(t, "rnacentral", selectable[0].Name)
 	assert.Equal(t, "project", selectable[0].Scope)
-	assert.Equal(t, "shared-pg", selectable[1].Name)
-	assert.Equal(t, "platform", selectable[1].Scope)
 }
 
 func TestListSelectableIncludesManagedConnections(t *testing.T) {

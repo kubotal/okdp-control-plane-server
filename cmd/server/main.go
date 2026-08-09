@@ -104,7 +104,7 @@ func main() {
 		logrus.Fatalf("Failed to load the connection type catalog: %v", err)
 	}
 	connectionRepo := repository.NewConnectionRepository(k8sClient, k8sTypedClient, k8sDiscoveryClient)
-	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, connectionCatalog, cfg.PlatformNamespace)
+	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, connectionCatalog)
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 
 	r := router.SetupRouter(cfg, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler, connectionHandler)
