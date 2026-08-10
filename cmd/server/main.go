@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/okdp/okdp-server-new/internal/api/handlers"
 	"github.com/okdp/okdp-server-new/internal/api/router"
 	"github.com/okdp/okdp-server-new/internal/config"
+	"github.com/okdp/okdp-server-new/internal/models"
 	"github.com/okdp/okdp-server-new/internal/repository"
 	"github.com/okdp/okdp-server-new/internal/service"
 )
@@ -107,6 +109,13 @@ func main() {
 	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, connectionCatalog)
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 
+	// The identity block is checked once, at startup, against what the cluster
+	// actually serves. A platform told to provision clients through kubauth on a
+	// cluster without kubauth would deploy services whose OIDC client is never
+	// created, and fail much later at the point of authenticating a user, with
+	// nothing pointing back here.
+	checkIdentityConfiguration(context.Background(), contextRepo, identityRepo)
+
 	r := router.SetupRouter(cfg, projectHandler, identityHandler, secretStoreHandler, externalSecretHandler, serviceHandler, sparkHandler, connectionHandler)
 
 	// Start Server
@@ -129,4 +138,31 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		logrus.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+// checkIdentityConfiguration fails fast on an identity block that cannot hold,
+// and stays quiet otherwise. A Context that cannot be read at all is not fatal:
+// the platform Context may simply not be there yet on a fresh cluster, and the
+// routes that need it already report their own absence.
+func checkIdentityConfiguration(ctx context.Context, contextRepo repository.ContextRepository, identityRepo repository.IdentityRepository) {
+	identity, err := contextRepo.GetIdentity(ctx)
+	if err != nil {
+		// A block that is present and wrong is a configuration error worth
+		// stopping for; the two are told apart by the error the repository
+		// returns, which only validates what it found.
+		if identity != nil {
+			logrus.Fatalf("Invalid platform.identity: %v", err)
+		}
+		logrus.WithError(err).Warn("Could not read platform.identity, assuming clients are provisioned elsewhere")
+		return
+	}
+
+	if identity.ProvisionsWithKubauth() && !identityRepo.Available(ctx) {
+		logrus.Fatalf(
+			"platform.identity.clientProvisioning is %q but the kubauth CRDs are not installed on this cluster. "+
+				"Install kubauth, or set it to %q if another mechanism makes the OAuth client Secrets.",
+			models.ClientProvisioningKubauth, models.ClientProvisioningExisting)
+	}
+
+	logrus.WithField("clientProvisioning", identity.ClientProvisioning).Info("Identity configuration accepted")
 }

@@ -33,7 +33,12 @@ type ContextRepository interface {
 	// GetIngressSuffix returns the ingress domain suffix (from spec.context.ingress.suffix).
 	GetIngressSuffix(ctx context.Context) (string, error)
 
-	// GetKubauthNamespace returns the namespace where kubauth resources live (from spec.context.kubauth.namespace).
+	// GetIdentity returns how OAuth clients are provisioned on this platform
+	// (from spec.context.platform.identity).
+	GetIdentity(ctx context.Context) (*models.PlatformIdentity, error)
+
+	// GetKubauthNamespace returns the namespace kubauth resources live in. It is
+	// only meaningful when clients are provisioned by kubauth.
 	GetKubauthNamespace(ctx context.Context) (string, error)
 
 	// GetProfileImages returns available images per profile type from spec.context.jupyter.profiles.
@@ -196,16 +201,37 @@ func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, er
 	return suffix, nil
 }
 
-func (r *k8sContextRepository) GetKubauthNamespace(ctx context.Context) (string, error) {
+// GetIdentity reads platform.identity. An absent block means the platform was
+// never told, and the safe reading is that somebody else makes the client
+// Secrets: provisioning them ourselves would post CRs on a cluster that never
+// asked for them.
+func (r *k8sContextRepository) GetIdentity(ctx context.Context) (*models.PlatformIdentity, error) {
 	u, err := r.getPlatformContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "clientProvisioning")
+	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "kubauthNamespace")
+
+	identity := &models.PlatformIdentity{
+		ClientProvisioning: provisioning,
+		KubauthNamespace:   namespace,
+	}
+	if identity.ClientProvisioning == "" {
+		identity.ClientProvisioning = models.ClientProvisioningExisting
+	}
+	return identity, identity.Validate()
+}
+
+func (r *k8sContextRepository) GetKubauthNamespace(ctx context.Context) (string, error) {
+	identity, err := r.GetIdentity(ctx)
 	if err != nil {
 		return "", err
 	}
-	ns, _, _ := unstructured.NestedString(u.Object, "spec", "context", "kubauth", "namespace")
-	if ns == "" {
-		return "", fmt.Errorf("kubauth.namespace not found in Context %s/%s", r.namespace, r.name)
+	if identity.ClientProvisioning != models.ClientProvisioningKubauth {
+		return "", fmt.Errorf("clients are provisioned by %q on this platform, not by kubauth", identity.ClientProvisioning)
 	}
-	return ns, nil
+	return identity.KubauthNamespace, nil
 }
 
 func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string][]models.ProfileImage, error) {
