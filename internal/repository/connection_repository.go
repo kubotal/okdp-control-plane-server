@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -47,20 +45,12 @@ type ConnectionRepository interface {
 	SecretKeys(ctx context.Context, namespace, name string) ([]string, bool, error)
 }
 
-// crdAvailabilityTTL bounds how long a negative probe is trusted, so that
-// installing the CRDs takes effect without restarting the server.
-const crdAvailabilityTTL = 30 * time.Second
-
 type k8sConnectionRepository struct {
-	client          dynamic.Interface
-	typedClient     kubernetes.Interface
-	discoveryClient discovery.DiscoveryInterface
-	namespacedGVR   schema.GroupVersionResource
-	clusterGVR      schema.GroupVersionResource
-
-	mu        sync.Mutex
-	available bool
-	checkedAt time.Time
+	client        dynamic.Interface
+	typedClient   kubernetes.Interface
+	namespacedGVR schema.GroupVersionResource
+	clusterGVR    schema.GroupVersionResource
+	probe         *APIProbe
 }
 
 func NewConnectionRepository(
@@ -68,12 +58,13 @@ func NewConnectionRepository(
 	typedClient kubernetes.Interface,
 	discoveryClient discovery.DiscoveryInterface,
 ) ConnectionRepository {
+	namespacedGVR := crd.GetConnectionGVR()
 	return &k8sConnectionRepository{
-		client:          client,
-		typedClient:     typedClient,
-		discoveryClient: discoveryClient,
-		namespacedGVR:   crd.GetConnectionGVR(),
-		clusterGVR:      crd.GetClusterConnectionGVR(),
+		client:        client,
+		typedClient:   typedClient,
+		namespacedGVR: namespacedGVR,
+		clusterGVR:    crd.GetClusterConnectionGVR(),
+		probe:         NewAPIProbe(discoveryClient, namespacedGVR, "KuboCD connections"),
 	}
 }
 
@@ -95,43 +86,7 @@ func (r *k8sConnectionRepository) kind(namespace string) string {
 }
 
 func (r *k8sConnectionRepository) Available(ctx context.Context) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Once the CRDs are there they do not go away in practice, so a positive
-	// result is kept for the lifetime of the process and only a negative one
-	// is re-probed.
-	if r.available {
-		return true
-	}
-	if !r.checkedAt.IsZero() && time.Since(r.checkedAt) < crdAvailabilityTTL {
-		return false
-	}
-	r.checkedAt = time.Now()
-
-	if r.discoveryClient == nil {
-		return false
-	}
-
-	groupVersion := r.namespacedGVR.GroupVersion().String()
-	resources, err := r.discoveryClient.ServerResourcesForGroupVersion(groupVersion)
-	if err != nil {
-		// A missing group is the expected state today, not a failure worth
-		// logging on every request.
-		if !apierrors.IsNotFound(err) {
-			logrus.WithError(err).Debug("Could not discover the KuboCD connection CRDs")
-		}
-		return false
-	}
-
-	for _, resource := range resources.APIResources {
-		if resource.Name == r.namespacedGVR.Resource {
-			r.available = true
-			logrus.Info("KuboCD connection CRDs detected: external connections are enabled")
-			return true
-		}
-	}
-	return false
+	return r.probe.Available()
 }
 
 func (r *k8sConnectionRepository) List(ctx context.Context, namespace string) ([]crd.Connection, error) {

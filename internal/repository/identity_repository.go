@@ -13,10 +13,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 )
 
 type IdentityRepository interface {
+	// Available reports whether the kubauth CRDs are installed. They are not
+	// part of the platform's baseline: an installation may delegate identity to
+	// an external provider and never carry them. Callers check this and say the
+	// feature is absent rather than letting every call fail as a server error.
+	Available(ctx context.Context) bool
+
 	// Users
 	ListUsers(ctx context.Context) ([]models.User, error)
 	GetUser(ctx context.Context, name string) (*models.User, error)
@@ -44,20 +51,23 @@ type k8sIdentityRepository struct {
 	userGVR   schema.GroupVersionResource
 	groupGVR  schema.GroupVersionResource
 	gbGVR     schema.GroupVersionResource
+	probe     *APIProbe
 }
 
-func NewIdentityRepository(client dynamic.Interface, namespace string) IdentityRepository {
+func NewIdentityRepository(client dynamic.Interface, discoveryClient discovery.DiscoveryInterface, namespace string) IdentityRepository {
 	groupName := "kubauth.kubotal.io"
 	version := "v1alpha1"
+
+	userGVR := schema.GroupVersionResource{
+		Group:    groupName,
+		Version:  version,
+		Resource: "users",
+	}
 
 	return &k8sIdentityRepository{
 		client:    client,
 		namespace: namespace,
-		userGVR: schema.GroupVersionResource{
-			Group:    groupName,
-			Version:  version,
-			Resource: "users",
-		},
+		userGVR:   userGVR,
 		groupGVR: schema.GroupVersionResource{
 			Group:    groupName,
 			Version:  version,
@@ -68,7 +78,12 @@ func NewIdentityRepository(client dynamic.Interface, namespace string) IdentityR
 			Version:  version,
 			Resource: "groupbindings",
 		},
+		probe: NewAPIProbe(discoveryClient, userGVR, "kubauth identity"),
 	}
+}
+
+func (r *k8sIdentityRepository) Available(ctx context.Context) bool {
+	return r.probe.Available()
 }
 
 // --- Users ---

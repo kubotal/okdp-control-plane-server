@@ -68,17 +68,17 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	// Initialize Identity stack
-	identityRepo := repository.NewIdentityRepository(k8sClient, cfg.PlatformNamespace)
+	identityRepo := repository.NewIdentityRepository(k8sClient, k8sDiscoveryClient, cfg.PlatformNamespace)
 	identityService := service.NewDefaultIdentityService(identityRepo)
 	identityHandler := handlers.NewIdentityHandler(identityService)
 
 	// Initialize SecretStore stack (namespace is dynamic per project)
-	secretStoreRepo := repository.NewSecretStoreRepository(k8sClient)
+	secretStoreRepo := repository.NewSecretStoreRepository(k8sClient, k8sDiscoveryClient)
 	secretStoreService := service.NewDefaultSecretStoreService(secretStoreRepo)
 	secretStoreHandler := handlers.NewSecretStoreHandler(secretStoreService)
 
 	// Initialize ExternalSecret stack (namespace is dynamic per project)
-	externalSecretRepo := repository.NewExternalSecretRepository(k8sClient)
+	externalSecretRepo := repository.NewExternalSecretRepository(k8sClient, k8sDiscoveryClient)
 	externalSecretService := service.NewDefaultExternalSecretService(externalSecretRepo, secretStoreRepo)
 	externalSecretHandler := handlers.NewExternalSecretHandler(externalSecretService)
 

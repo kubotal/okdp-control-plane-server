@@ -38,8 +38,14 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		api.PUT("/projects/:name", projectHandler.UpdateProject)
 		api.DELETE("/projects/:name", projectHandler.DeleteProject)
 
-		// Identity
-		identity := api.Group("/v1/identity")
+		// Identity. The whole group rests on the kubauth CRDs, which an
+		// installation may not carry at all: guard it once here rather than in
+		// each handler, so a route added later cannot slip through unguarded.
+		identity := api.Group("/v1/identity", handlers.RequireFeature(
+			func(c *gin.Context) bool { return identityHandler.Available(c.Request.Context()) },
+			"kubauth identity",
+			"Identity management is not available on this cluster: the kubauth CRDs are not installed.",
+		))
 		{
 			// Users
 			identity.GET("/users", identityHandler.ListUsers)
@@ -58,7 +64,15 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		// Secret Stores (scoped per project namespace)
 		requireProject := middleware.RequireProject(projectHandler.Resolve)
 
-		secretStores := api.Group("/projects/:name/secret-stores", requireProject)
+		// Both groups rest on the external-secrets CRDs, absent from a cluster
+		// with no vault integration.
+		requireESO := handlers.RequireFeature(
+			func(c *gin.Context) bool { return secretStoreHandler.Available(c.Request.Context()) },
+			"external-secrets",
+			"Vault integration is not available on this cluster: the external-secrets CRDs are not installed.",
+		)
+
+		secretStores := api.Group("/projects/:name/secret-stores", requireProject, requireESO)
 		{
 			secretStores.GET("", secretStoreHandler.ListSecretStores)
 			secretStores.POST("", secretStoreHandler.CreateSecretStore)
@@ -69,7 +83,7 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 		}
 
 		// External Secrets (scoped per project namespace)
-		externalSecrets := api.Group("/projects/:name/external-secrets", requireProject)
+		externalSecrets := api.Group("/projects/:name/external-secrets", requireProject, requireESO)
 		{
 			externalSecrets.GET("", externalSecretHandler.ListExternalSecrets)
 			externalSecrets.POST("", externalSecretHandler.CreateExternalSecret)
