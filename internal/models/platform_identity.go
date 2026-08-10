@@ -2,35 +2,26 @@ package models
 
 import "fmt"
 
-// How the OAuth client Secret a service authenticates with comes into being.
-// This says nothing about where the OIDC provider is: those coordinates live in
-// platform.oidc and are the same whichever value this takes.
+// Who makes the OAuth client Secret. Says nothing about where the provider is:
+// those coordinates live in platform.oidc either way.
 const (
-	// ClientProvisioningExisting: somebody else made the Secret and the package
-	// is handed its name. local-secrets-provider on the sandbox, External
-	// Secrets projecting from a vault elsewhere.
+	// Somebody else made the Secret and the package is handed its name.
 	ClientProvisioningExisting = "existing"
-	// ClientProvisioningKubauth: the package generates the Secret and posts its
-	// own OidcClient CR for kubauth to pick up.
+	// The package generates it and posts its own OidcClient CR.
 	ClientProvisioningKubauth = "kubauth"
 )
 
-// PlatformIdentity is the platform.identity block of the platform Context.
-//
-// It is written rather than inferred from what the cluster happens to carry: a
-// platform that silently changes behaviour because a CRD appeared is one nobody
-// can reason about, and "kubauth is installed" is not the same statement as
-// "kubauth is what provisions our clients".
+// PlatformIdentity is the platform.identity block, written rather than inferred
+// from the CRDs present: "kubauth is installed" is not "kubauth provisions our
+// clients".
 type PlatformIdentity struct {
 	ClientProvisioning string `json:"clientProvisioning"`
-	// KubauthNamespace is where the OidcClient CRs go. Required by, and only
-	// meaningful for, the kubauth mode.
+	// Where the OidcClient CRs go. Only meaningful in the kubauth mode.
 	KubauthNamespace string `json:"kubauthNamespace,omitempty"`
 }
 
-// Validate rejects a block that cannot be acted on. A misconfiguration caught
-// here is a clear message at startup; the same one caught later is a service
-// that deploys and then cannot authenticate anyone.
+// Validate rejects a block that cannot be acted on, at startup rather than when
+// a user first tries to log in.
 func (i *PlatformIdentity) Validate() error {
 	switch i.ClientProvisioning {
 	case ClientProvisioningExisting:

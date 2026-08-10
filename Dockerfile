@@ -3,6 +3,7 @@ ARG KUBOCD_VERSION=v0.3.0
 
 # Cross-compile on the native build platform (no QEMU emulation): the Go
 # toolchain runs natively and emits a static binary for the target arch.
+ARG KUBOCD_SOURCE=release
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS go-build
 
 ARG TARGETOS=linux
@@ -25,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # schemas (internal/service/package_schema_service.go). Downloaded per target
 # arch from the official release, on the native build platform (no QEMU), with
 # checksum verification.
-FROM --platform=$BUILDPLATFORM alpine:3.21 AS kubocd
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS kubocd-release
 ARG TARGETARCH
 ARG KUBOCD_VERSION
 RUN apk add --no-cache curl coreutils && \
@@ -40,6 +41,13 @@ RUN apk add --no-cache curl coreutils && \
     curl -fsSL -O "${BASE}/checksums.txt" && \
     grep "kubocd_Linux_${KARCH}\$" checksums.txt | sha256sum -c - && \
     install -m 0755 "kubocd_Linux_${KARCH}" /kubocd
+
+# A kubocd built from a branch, for features not in a release yet. Put the
+# linux binary in bin/kubocd and build with --build-arg KUBOCD_SOURCE=local.
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS kubocd-local
+COPY bin/kubocd /kubocd
+
+FROM kubocd-${KUBOCD_SOURCE} AS kubocd
 
 FROM alpine:3.21
 
