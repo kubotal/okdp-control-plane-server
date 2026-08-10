@@ -28,7 +28,6 @@ func TestEmbeddedCatalogLoadsBuiltInTypes(t *testing.T) {
 	assert.True(t, names["trino"])
 	assert.True(t, names["hive"])
 	assert.True(t, names["iceberg-catalog"])
-	assert.True(t, names["oidc"])
 }
 
 func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
@@ -268,11 +267,13 @@ func TestEndpointComesFromTheContract(t *testing.T) {
 
 // Every contract the platform publishes must be declarable, or the wizard
 // leaves the user stuck with "No compatible connection available" and no way to
-// create one. These are the six ClusterInterfaces of platform-packages.
+// create one. These are the five ClusterInterfaces of platform-packages: the
+// OIDC provider is deliberately not among them, it is platform configuration
+// read from the Context, not something a project connects to.
 func TestEveryPlatformContractIsInTheCatalog(t *testing.T) {
 	catalog := newTestCatalog(t)
 
-	for _, name := range []string{"database-server", "s3", "trino", "hive", "iceberg-catalog", "oidc"} {
+	for _, name := range []string{"database-server", "s3", "trino", "hive", "iceberg-catalog"} {
 		ct, ok := catalog.Get(name)
 		require.True(t, ok, "%s is a ClusterInterface of the platform and must be declarable", name)
 		assert.True(t, ct.External, "%s must offer a creation form", name)
