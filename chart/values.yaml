@@ -20,7 +20,7 @@ configuration:
   platformContextName: ""
   platformContextNamespace: kubocd-system
   # Single origin, set verbatim in the Access-Control-Allow-Origin header.
-  allowedOrigins: https://console.okdp.dev-sandbox
+  allowedOrigins: https://console.okdp.sandbox
   logLevel: info
   releaseInterval: 30m
   releaseTimeout: 10m
