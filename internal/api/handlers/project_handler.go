@@ -197,3 +197,10 @@ func (h *ProjectHandler) StreamProjects(c *gin.Context) {
 		}
 	}
 }
+
+// Resolve looks a project up by name. It is what middleware.RequireProject
+// calls to establish that a path segment really designates a project, before
+// any handler passes it to the Kubernetes client as a namespace.
+func (h *ProjectHandler) Resolve(c *gin.Context, name string) (*models.Project, error) {
+	return h.service.GetProject(c.Request.Context(), name)
+}
