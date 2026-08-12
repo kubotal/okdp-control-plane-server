@@ -41,8 +41,14 @@ The server runs **in-cluster** from the image published by CI, deployed with the
 bundled chart (`chart/`):
 
 ```bash
-helm install okdp-server ./chart -n okdp-system
+helm install okdp-server ./chart -n okdp-system \
+  --set configuration.contextName=okdp-control-plane \
+  --set configuration.allowedOrigins=https://okdp-ui.okdp.sandbox
 ```
+
+`contextName` names the KuboCD Context holding the service catalog, and
+`allowedOrigins` is written verbatim into `Access-Control-Allow-Origin`: the
+defaults suit no real cluster.
 
 For local development you can still run `go run cmd/server/main.go`.
 
