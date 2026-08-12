@@ -7,12 +7,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/okdp/okdp-server-new/internal/api/handlers"
-	"github.com/okdp/okdp-server-new/internal/api/router"
-	"github.com/okdp/okdp-server-new/internal/config"
-	"github.com/okdp/okdp-server-new/internal/models"
-	"github.com/okdp/okdp-server-new/internal/repository"
-	"github.com/okdp/okdp-server-new/internal/service"
+	"github.com/okdp/okdp-control-plane-server/internal/api/handlers"
+	"github.com/okdp/okdp-control-plane-server/internal/api/router"
+	"github.com/okdp/okdp-control-plane-server/internal/config"
+	"github.com/okdp/okdp-control-plane-server/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/repository"
+	"github.com/okdp/okdp-control-plane-server/internal/service"
 )
 
 // @title           OKDP Server New API

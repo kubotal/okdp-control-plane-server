@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"github.com/okdp/okdp-server-new/internal/repository/crd"
+	"github.com/okdp/okdp-control-plane-server/internal/repository/crd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

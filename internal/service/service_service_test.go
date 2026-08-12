@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/okdp/okdp-server-new/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/models"
 )
 
 func TestNormalizeAndValidateCatalogService(t *testing.T) {

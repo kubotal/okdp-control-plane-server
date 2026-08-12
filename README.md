@@ -1,4 +1,4 @@
-# okdp-server-new
+# okdp-control-plane-server
 
 Minimal Go server for OKDP UI New, featuring a standard layered architecture and Kubernetes integration.
 

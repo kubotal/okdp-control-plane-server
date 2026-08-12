@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/okdp/okdp-server-new/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/models"
 )
 
 // connectionTypesFS holds the built-in connection types. Adding a type is a

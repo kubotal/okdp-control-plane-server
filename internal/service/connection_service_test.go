@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/okdp/okdp-server-new/internal/models"
-	"github.com/okdp/okdp-server-new/internal/repository/crd"
-	"github.com/okdp/okdp-server-new/internal/service/mocks"
+	"github.com/okdp/okdp-control-plane-server/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/repository/crd"
+	"github.com/okdp/okdp-control-plane-server/internal/service/mocks"
 )
 
 func newServiceUnderTest(t *testing.T, crdAvailable bool) (*DefaultConnectionService, *mocks.ConnectionRepository, *mocks.ServiceRepository) {

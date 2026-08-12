@@ -5,9 +5,9 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	"github.com/okdp/okdp-server-new/internal/api/handlers"
-	"github.com/okdp/okdp-server-new/internal/api/middleware"
-	"github.com/okdp/okdp-server-new/internal/config"
+	"github.com/okdp/okdp-control-plane-server/internal/api/handlers"
+	"github.com/okdp/okdp-control-plane-server/internal/api/middleware"
+	"github.com/okdp/okdp-control-plane-server/internal/config"
 )
 
 // SetupRouter initializes the Gin router and defines routes

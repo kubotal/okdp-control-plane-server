@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"github.com/okdp/okdp-server-new/internal/models"
-	"github.com/okdp/okdp-server-new/internal/repository"
+	"github.com/okdp/okdp-control-plane-server/internal/models"
+	"github.com/okdp/okdp-control-plane-server/internal/repository"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
