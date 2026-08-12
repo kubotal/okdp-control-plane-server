@@ -40,7 +40,7 @@ make dev
 The published chart is the normal path:
 
 ```bash
-helm install okdp-server oci://quay.io/okdp/charts/okdp-server --version <X>
+helm install okdp-control-plane-server oci://quay.io/okdp/charts/okdp-control-plane-server --version <X>
 ```
 
 The examples below install from `chart/` in this checkout, which is what a
@@ -50,7 +50,7 @@ The server runs **in-cluster** from the image published by CI, deployed with the
 bundled chart (`chart/`):
 
 ```bash
-helm install okdp-server ./chart -n okdp-system \
+helm install okdp-control-plane-server ./chart -n okdp-system \
   --set configuration.contextName=okdp-control-plane \
   --set configuration.allowedOrigins=https://okdp-ui.okdp.sandbox
 ```
