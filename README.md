@@ -37,6 +37,15 @@ make dev
 
 ## Deploy with the Helm chart
 
+The published chart is the normal path:
+
+```bash
+helm install okdp-server oci://quay.io/okdp/charts/okdp-server --version <X>
+```
+
+The examples below install from `chart/` in this checkout, which is what a
+contributor does while changing the chart itself.
+
 The server runs **in-cluster** from the image published by CI, deployed with the
 bundled chart (`chart/`):
 
