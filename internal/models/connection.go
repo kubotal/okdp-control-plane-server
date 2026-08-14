@@ -80,7 +80,7 @@ func (f *ConnectionField) Applies(values map[string]any) bool {
 // values, the recognition of deployed services as connection providers, and
 // the ready-to-use snippets shown when a connection is opened.
 type ConnectionType struct {
-	// Name IS the KuboCD Interface this type produces. One type, one contract,
+	// Name IS the KuboCD ConnectionType this type produces. One type, one contract,
 	// deliberately: an entry form that produced a differently named contract
 	// would mean nothing a package asks for could be found by its own name.
 	Name        string `json:"name"`

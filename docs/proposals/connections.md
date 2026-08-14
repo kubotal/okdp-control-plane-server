@@ -40,8 +40,8 @@ external list at platform scope for connections shared by every project.
 | Where the connectivity test runs | Server pod, like `SecretStoreService.TestConnection` | Reuses the existing precedent; a Job in the project namespace costs RBAC, an image, cleanup and latency for a fidelity gain we do not need yet |
 | A test that only reaches the host | **Rejected** | The Vault precedent already refuses `sys/health`: a wrong password must fail the test |
 | Types in v1 | `postgresql`, `mysql`, `s3` declarable; `trino` discovered only | Covers the requested cases; the descriptor format makes a fourth type one file |
-| Where type descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `Interface` schemas can be layered over them later without touching the API contract |
-| Credentials | Kubernetes Secret, referenced by annotation | Keeps `spec.values` exactly the shape an `Interface` schema will validate, and reading a Connection never discloses a password |
+| Where type descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `ConnectionType` schemas can be layered over them later without touching the API contract |
+| Credentials | Kubernetes Secret, referenced by annotation | Keeps `spec.values` exactly the shape a `ConnectionType` schema will validate, and reading a Connection never discloses a password |
 | Scope | Project **and** platform-wide (admin) | Some connections are shared by every project |
 
 ## 4. API
@@ -109,16 +109,16 @@ an edit: the test endpoint sees only what the form holds.
 ## 8. Out of scope (this proposal)
 
 - Wiring a connection into a service's deployment parameters. That is the point of the exercise,
-  but it belongs with the KuboCD packages once `Interface`s exist for these types.
-- Declaring `Interface` CRDs for `postgresql`, `mysql`, `s3`. Until a package ships them, a
-  created Connection reconciles to `ERROR — Interface <type> unknown`: the object is correct, the
-  contract it references does not exist yet.
+  but it belongs with the KuboCD packages once `ConnectionType`s exist for these types.
+- Declaring `ConnectionType` CRDs for `postgresql`, `mysql`, `s3`. Until a package ships them, a
+  created Connection does not reconcile: the object is correct, the contract it references does
+  not exist yet.
 - A tester for `trino` — it is discovered, not declared, so there is no form to validate.
 
 ## 9. RBAC
 
 Added to the server ClusterRole: `connections` and `clusterconnections` in full CRUD,
-`interfaces` and `clusterinterfaces` read-only (they are owned by the packages), and `services`
+`connectiontypes` and `clusterconnectiontypes` read-only (they are owned by the packages), and `services`
 read-only for endpoint resolution. Rules on a CRD that is not installed are inert, so the chart
 applies unchanged on a cluster without them.
 

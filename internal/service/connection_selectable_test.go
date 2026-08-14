@@ -12,32 +12,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestListSelectableOffersTheProjectConnectionsOfTheInterface(t *testing.T) {
+func TestListSelectableOffersTheProjectConnectionsOfTheConnectionType(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "rnacentral", Namespace: "demo"},
-			Spec:       crd.ConnectionSpec{Interface: "database-server", Description: "public db"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "database-server", Description: "public db"},
 			Status:     crd.ConnectionStatus{Phase: "READY"},
 		},
 		{
 			// Managed by a release: still selectable — that is the whole point
 			// of a published connection.
 			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-endpoint", Namespace: "demo"},
-			Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "endpoint"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "trino", OutputName: "endpoint"},
 			Status:     crd.ConnectionStatus{Phase: "READY", Parent: "demo-trino"},
 		},
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "lake", Namespace: "demo"},
-			Spec:       crd.ConnectionSpec{Interface: "s3"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "s3"},
 		},
 	}, nil)
 
 	selectable, err := svc.ListSelectable(context.Background(), "demo", "database-server")
 
 	require.NoError(t, err)
-	require.Len(t, selectable, 1, "only the connections of the project, of that interface")
+	require.Len(t, selectable, 1, "only the connections of the project, of that connection type")
 	assert.Equal(t, "rnacentral", selectable[0].Name)
 	assert.Equal(t, "project", selectable[0].Scope)
 }
@@ -48,7 +48,7 @@ func TestListSelectableIncludesManagedConnections(t *testing.T) {
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-endpoint", Namespace: "demo"},
-			Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "endpoint"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "trino", OutputName: "endpoint"},
 			Status:     crd.ConnectionStatus{Phase: "READY", Parent: "demo-trino"},
 		},
 	}, nil)

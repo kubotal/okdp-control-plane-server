@@ -21,8 +21,8 @@ import (
 
 // AnnotationCredentialsSecret names the Secret holding the credential fields of
 // a connection. They are kept out of spec.values so that what the CRD stores
-// stays exactly the shape a KuboCD Interface schema will validate, and so that
-// reading a Connection never discloses a password.
+// stays exactly the shape a KuboCD ConnectionType schema will validate, and so
+// that reading a Connection never discloses a password.
 const AnnotationCredentialsSecret = "okdp.io/credentials-secret"
 
 // AnnotationCredentialsOwned records whether the console wrote that Secret or
@@ -37,8 +37,8 @@ const credentialsSecretSuffix = "-credentials"
 
 // valueSecretRef names the value published so a KuboCD package can bind the
 // credentials: the NAME of the Secret holding them, never a value. It matches
-// the secretRef field declared by the KuboCD Interfaces, which are the contract
-// of record.
+// the secretRef field declared by the KuboCD ConnectionTypes, which are the
+// contract of record.
 //
 // A credentialsVersion digest used to be published alongside, so that rotating a
 // password changed the Connection and reached running pods. It was dropped: the
@@ -70,8 +70,8 @@ type ConnectionService interface {
 	ListInternal(ctx context.Context, project string) ([]models.InternalConnection, error)
 
 	// ListSelectable returns the connections a deployment form can offer for an
-	// input of the given interface: the project's own plus the platform-wide
-	// ones, managed included.
+	// input of the given connection type: the project's own plus the
+	// platform-wide ones, managed included.
 	ListSelectable(ctx context.Context, project, iface string) ([]models.SelectableConnection, error)
 
 	// ListConsumers returns the services of a project bound to a connection,
@@ -189,9 +189,9 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 		Spec: crd.ConnectionSpec{
 			// The type name IS the contract: a package asking for database-server
 			// finds it by that name, here and in the catalog.
-			Interface:   connectionType.Name,
-			Description: req.Description,
-			Values:      public,
+			ConnectionType: connectionType.Name,
+			Description:    req.Description,
+			Values:         public,
 		},
 	}
 	if len(secrets) > 0 || !ownSecret {
@@ -259,7 +259,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		}
 	}
 
-	existing.Spec.Interface = connectionType.Name
+	existing.Spec.ConnectionType = connectionType.Name
 	existing.Spec.Description = req.Description
 	existing.Spec.Values = public
 
@@ -411,8 +411,8 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 
 	entry := models.InternalConnection{
 		Name:        connection.Name,
-		Type:        connection.Spec.Interface,
-		TypeDisplay: connection.Status.InterfaceDisplay,
+		Type:        connection.Spec.ConnectionType,
+		TypeDisplay: connection.Status.ConnectionTypeDisplay,
 		Service:     connection.Labels[crd.LabelService],
 		ReleaseName: connection.Status.Parent,
 		Namespace:   project,
@@ -420,7 +420,7 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		Values:      values,
 		Managed:     true,
 	}
-	if connectionType, known := s.catalog.Get(connection.Spec.Interface); known {
+	if connectionType, known := s.catalog.Get(connection.Spec.ConnectionType); known {
 		entry.Icon = connectionType.Icon
 		entry.Category = connectionType.Category
 		// The catalog's display name wins over what the controller wrote in
@@ -429,10 +429,10 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		entry.TypeDisplay = connectionType.DisplayName
 	}
 	if entry.TypeDisplay == "" {
-		entry.TypeDisplay = connection.Spec.Interface
+		entry.TypeDisplay = connection.Spec.ConnectionType
 	}
 
-	entry.Endpoint = endpointFrom(values, s.catalog, connection.Spec.Interface)
+	entry.Endpoint = endpointFrom(values, s.catalog, connection.Spec.ConnectionType)
 	// host and port stay filled when the contract has them, for the columns that
 	// show them separately. Most contracts publish a URI instead.
 	if host, ok := values["host"].(string); ok {
@@ -549,10 +549,10 @@ func splitValues(connectionType *models.ConnectionType, values map[string]any) (
 }
 
 func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namespace string) models.ConnectionResponse {
-	// The type name is the interface name: one type, one contract. The label
-	// that used to carry the type separately is gone, and reading it would only
-	// resurrect the names of types that no longer exist.
-	connectionTypeName := connection.Spec.Interface
+	// One type, one contract. The label that used to carry the type separately
+	// is gone, and reading it would only resurrect the names of types that no
+	// longer exist.
+	connectionTypeName := connection.Spec.ConnectionType
 
 	values := connection.Spec.Values
 	if values == nil {
@@ -619,7 +619,7 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 	collect := func(connections []crd.Connection, scope string) {
 		for i := range connections {
 			connection := &connections[i]
-			if iface != "" && connection.Spec.Interface != iface {
+			if iface != "" && connection.Spec.ConnectionType != iface {
 				continue
 			}
 			if connection.Spec.Disabled {
@@ -628,7 +628,7 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 			result = append(result, models.SelectableConnection{
 				Name:        connection.Name,
 				Scope:       models.ConnectionScopeProject,
-				Type:        connection.Spec.Interface,
+				Type:        connection.Spec.ConnectionType,
 				Status:      connection.Status.Phase,
 				Description: connection.Spec.Description,
 				Managed:     connection.IsManaged(),
@@ -655,8 +655,8 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 // showed "not available yet" while its address sat in its own values, two
 // clicks away in the details panel. The descriptor now names the keys that
 // carry it, in order of preference.
-func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, interfaceName string) string {
-	if connectionType, known := catalog.Get(interfaceName); known {
+func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, connectionTypeName string) string {
+	if connectionType, known := catalog.Get(connectionTypeName); known {
 		for _, key := range connectionType.EndpointFrom {
 			if value, ok := values[key].(string); ok && value != "" {
 				return value

@@ -10,15 +10,15 @@ func TestInputsOfReadsAPackageDeclaration(t *testing.T) {
 	var doc map[string]any
 	raw := `
 inputs:
-  - interface: s3
+  - connectionType: s3
     namedConnection:
       name: '{{ .Parameters.s3Connection | default "-" }}'
     alias: storage
     optional: "true"
-  - interface: postgresql
+  - connectionType: postgresql
     namedConnection:
       name: "{{ .Parameters.pgConnection }}"
-  - interface: trino
+  - connectionType: trino
     release:
       name: other
 `
@@ -33,7 +33,7 @@ inputs:
 	if inputs[0].Alias != "storage" || inputs[0].Parameter != "s3Connection" || !inputs[0].Optional {
 		t.Errorf("input 0 = %+v", inputs[0])
 	}
-	// Alias defaults to the interface name.
+	// Alias defaults to the connection type name.
 	if inputs[1].Alias != "postgresql" || inputs[1].Parameter != "pgConnection" {
 		t.Errorf("input 1 = %+v", inputs[1])
 	}
@@ -60,10 +60,10 @@ schema:
       metadataDb:
         type: string
         description: "Metadata database"
-        x-kubocd-connection-ref: { interface: postgresql }
+        x-kubocd-connection-ref: { connectionType: postgresql }
       pgConnection:
         type: string
-        x-kubocd-connection-ref: { interface: postgresql }
+        x-kubocd-connection-ref: { connectionType: postgresql }
       databases:
         type: string
         x-kubocd-connection-selector: { interface: postgresql, required: true }

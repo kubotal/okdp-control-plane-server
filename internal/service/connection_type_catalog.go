@@ -21,8 +21,8 @@ var connectionTypesFS embed.FS
 
 // ConnectionTypeCatalog exposes the known connection types.
 //
-// It is deliberately an interface: once the KuboCD `Interface` CRD is available
-// on the cluster, an implementation backed by it can be layered on top so that
+// It is deliberately an interface: once the KuboCD `ConnectionType` CRD is
+// available on the cluster, an implementation backed by it can be layered on so that
 // cluster-provided schemas take precedence over the built-in ones, without any
 // change to the callers or to the API contract.
 type ConnectionTypeCatalog interface {

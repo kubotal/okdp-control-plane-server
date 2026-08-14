@@ -36,22 +36,6 @@ func GetClusterConnectionGVR() schema.GroupVersionResource {
 	}
 }
 
-func GetInterfaceGVR() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "kubocd.kubotal.io",
-		Version:  "v1alpha1",
-		Resource: "interfaces",
-	}
-}
-
-func GetClusterInterfaceGVR() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group:    "kubocd.kubotal.io",
-		Version:  "v1alpha1",
-		Resource: "clusterinterfaces",
-	}
-}
-
 type Connection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -61,11 +45,11 @@ type Connection struct {
 }
 
 type ConnectionSpec struct {
-	// Interface names the Interface (or ClusterInterface) whose schema the
-	// values must satisfy.
-	Interface string `json:"interface"`
+	// ConnectionType names the ConnectionType (or ClusterConnectionType) whose
+	// schema the values must satisfy.
+	ConnectionType string `json:"connectionType"`
 	// Priority arbitrates between several connections satisfying the same
-	// interface; KuboCD defaults it to 100.
+	// connection type. KuboCD defaults it to 100.
 	Priority int `json:"priority,omitempty"`
 	// Values holds the connection settings. Credentials are never stored here:
 	// they live in a Kubernetes Secret referenced through valuesFrom.
@@ -81,10 +65,10 @@ type ConnectionSpec struct {
 type ConnectionStatus struct {
 	Phase string `json:"phase,omitempty"`
 	// Parent is the release owning a managed connection.
-	Parent           string `json:"parent,omitempty"`
-	Message          string `json:"message,omitempty"`
-	InterfaceKind    string `json:"interfaceKind,omitempty"`
-	InterfaceDisplay string `json:"interfaceDisplay,omitempty"`
+	Parent                string `json:"parent,omitempty"`
+	Message               string `json:"message,omitempty"`
+	ConnectionTypeKind    string `json:"connectionTypeKind,omitempty"`
+	ConnectionTypeDisplay string `json:"connectionTypeDisplay,omitempty"`
 }
 
 // IsManaged reports whether the connection was produced by the KuboCD release

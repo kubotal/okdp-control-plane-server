@@ -544,7 +544,7 @@ func inputsOf(doc map[string]any) []models.PackageInput {
 		if !ok {
 			continue
 		}
-		iface, _ := entry["interface"].(string)
+		iface, _ := entry["connectionType"].(string)
 		if iface == "" {
 			continue
 		}
@@ -553,7 +553,7 @@ func inputsOf(doc map[string]any) []models.PackageInput {
 		if alias, _ := entry["alias"].(string); alias != "" {
 			input.Alias = alias
 		} else {
-			// The package format defaults the alias to the interface name.
+			// The package format defaults the alias to the connection type name.
 			input.Alias = iface
 		}
 		// KcdTemplateBool fields arrive as template strings, so a literal true
@@ -623,7 +623,7 @@ func inputsFromMarkers(doc map[string]any) []models.PackageInput {
 		if !ok {
 			continue
 		}
-		iface, _ := marker["interface"].(string)
+		iface, _ := marker["connectionType"].(string)
 		if iface == "" {
 			continue
 		}

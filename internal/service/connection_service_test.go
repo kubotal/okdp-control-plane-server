@@ -98,7 +98,7 @@ func TestCreateStoresCredentialsInASecretAndNotInTheSpec(t *testing.T) {
 	assert.Equal(t, "db.example.com", stored.Spec.Values["host"])
 	// The type name is the contract: a package asking for database-server finds
 	// this connection by that name.
-	assert.Equal(t, "database-server", stored.Spec.Interface)
+	assert.Equal(t, "database-server", stored.Spec.ConnectionType)
 	assert.Equal(t, "warehouse-credentials", stored.Spec.Values["secretRef"],
 		"a consumer reads the Secret name from spec.values, it cannot see annotations")
 	assert.NotContains(t, stored.Spec.Values, "username", "the user is a credential, it belongs to the Secret")
@@ -132,7 +132,7 @@ func TestUpdateOnlyWritesTheResubmittedCredentials(t *testing.T) {
 
 	existing := &crd.Connection{
 		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
-		Spec:       crd.ConnectionSpec{Interface: "database-server"},
+		Spec:       crd.ConnectionSpec{ConnectionType: "database-server"},
 	}
 	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
 	connectionRepo.On("Update", mock.Anything, "demo", mock.Anything).Return(nil)
@@ -161,8 +161,8 @@ func TestUpdateWithNoCredentialAtAllLeavesTheSecretAlone(t *testing.T) {
 	existing := &crd.Connection{
 		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
 		Spec: crd.ConnectionSpec{
-			Interface: "database-server",
-			Values:    map[string]any{"secretRef": "warehouse-credentials"},
+			ConnectionType: "database-server",
+			Values:         map[string]any{"secretRef": "warehouse-credentials"},
 		},
 	}
 	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
@@ -232,7 +232,7 @@ func TestManagedConnectionsAreNotEditable(t *testing.T) {
 
 	managed := &crd.Connection{
 		ObjectMeta: metav1.ObjectMeta{Name: "trino", Namespace: "demo"},
-		Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "main"},
+		Spec:       crd.ConnectionSpec{ConnectionType: "trino", OutputName: "main"},
 		Status:     crd.ConnectionStatus{Parent: "demo-trino"},
 	}
 	connectionRepo.On("Get", mock.Anything, "demo", "trino").Return(managed, nil)
@@ -254,7 +254,7 @@ func TestManagedConnectionWithoutAParentIsStillRefused(t *testing.T) {
 
 	managed := &crd.Connection{
 		ObjectMeta: metav1.ObjectMeta{Name: "trino", Namespace: "demo"},
-		Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "main"},
+		Spec:       crd.ConnectionSpec{ConnectionType: "trino", OutputName: "main"},
 	}
 	connectionRepo.On("Get", mock.Anything, "demo", "trino").Return(managed, nil)
 
@@ -272,12 +272,12 @@ func TestListExcludesManagedConnections(t *testing.T) {
 	connectionRepo.On("List", mock.Anything, "demo").Return([]crd.Connection{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "warehouse"},
-			Spec:       crd.ConnectionSpec{Interface: "database-server"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "database-server"},
 		},
 		{
 			// Owned by a release: it belongs to the internal view.
 			ObjectMeta: metav1.ObjectMeta{Name: "trino"},
-			Spec:       crd.ConnectionSpec{Interface: "trino", OutputName: "main"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "trino", OutputName: "main"},
 		},
 	}, nil)
 
@@ -302,9 +302,9 @@ func TestListInternalOnlyListsPublishedConnections(t *testing.T) {
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kcd-demo-trino-main"},
 			Spec: crd.ConnectionSpec{
-				Interface:  "trino",
-				OutputName: "main",
-				Values:     map[string]any{"internalUri": "jdbc:trino://trino.demo.svc.cluster.local:8080"},
+				ConnectionType: "trino",
+				OutputName:     "main",
+				Values:         map[string]any{"internalUri": "jdbc:trino://trino.demo.svc.cluster.local:8080"},
 			},
 			Status: crd.ConnectionStatus{Parent: "demo-trino", Phase: "READY"},
 		},
@@ -312,7 +312,7 @@ func TestListInternalOnlyListsPublishedConnections(t *testing.T) {
 			// Declared by a user on the Connections page, not published by a
 			// release: it belongs to the external tab.
 			ObjectMeta: metav1.ObjectMeta{Name: "corporate-warehouse"},
-			Spec:       crd.ConnectionSpec{Interface: "database-server"},
+			Spec:       crd.ConnectionSpec{ConnectionType: "database-server"},
 		},
 	}, nil)
 
@@ -335,9 +335,9 @@ func TestListInternalShowsTheAddressOfAURIContract(t *testing.T) {
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "kcd-demo-hms-metastore"},
 			Spec: crd.ConnectionSpec{
-				Interface:  "hive",
-				OutputName: "metastore",
-				Values:     map[string]any{"thriftUri": "thrift://demo-hms.demo.svc.cluster.local:9083"},
+				ConnectionType: "hive",
+				OutputName:     "metastore",
+				Values:         map[string]any{"thriftUri": "thrift://demo-hms.demo.svc.cluster.local:9083"},
 			},
 			Status: crd.ConnectionStatus{Parent: "demo-hms", Phase: "READY"},
 		},
@@ -672,7 +672,7 @@ func TestResponseSaysWhetherTheConsoleOwnsTheSecret(t *testing.T) {
 			svc, _, _ := newServiceUnderTest(t, true)
 			connection := &crd.Connection{
 				ObjectMeta: metav1.ObjectMeta{Name: tt.connection, Annotations: tt.annotations},
-				Spec:       crd.ConnectionSpec{Interface: "database-server"},
+				Spec:       crd.ConnectionSpec{ConnectionType: "database-server"},
 			}
 
 			response := svc.toResponse(connection, "demo")
