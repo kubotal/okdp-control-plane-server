@@ -66,7 +66,7 @@ schema:
         x-kubocd-connection-ref: { connectionType: postgresql }
       databases:
         type: string
-        x-kubocd-connection-selector: { interface: postgresql, required: true }
+        x-kubocd-something-else: { connectionType: postgresql, required: true }
 `
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatal(err)
@@ -75,13 +75,13 @@ schema:
 	inputs := inputsFromMarkers(doc)
 
 	if len(inputs) != 2 {
-		t.Fatalf("got %d inputs, want 2 (the selector offers no choice): %+v", len(inputs), inputs)
+		t.Fatalf("got %d inputs, want 2 (a marker we do not know is not an input): %+v", len(inputs), inputs)
 	}
 	// Sorted by parameter name.
 	if inputs[0].Parameter != "metadataDb" || inputs[0].Optional {
 		t.Errorf("metadataDb = %+v, want required (listed in the parent's required array)", inputs[0])
 	}
-	if inputs[0].Interface != "postgresql" || inputs[0].Description != "Metadata database" {
+	if inputs[0].ConnectionType != "postgresql" || inputs[0].Description != "Metadata database" {
 		t.Errorf("metadataDb detail = %+v", inputs[0])
 	}
 	if inputs[1].Parameter != "pgConnection" || !inputs[1].Optional {
