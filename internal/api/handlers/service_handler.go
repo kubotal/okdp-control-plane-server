@@ -335,17 +335,6 @@ func (h *ServiceHandler) GetServiceVersions(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GetServiceSchema godoc
-// @Summary      Get JSON Schema for a platform service
-// @Description  Returns the JSON Schema (parameters with UI metadata) for a given service version
-// @Tags         platform-services
-// @Produce      json
-// @Param        serviceName path string true "Service name"
-// @Param        tag query string false "Package version tag (defaults to Context CR tag)"
-// @Success      200  {object}  map[string]interface{}
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /api/platform-services/{serviceName}/schema [get]
 // GetServiceInputs godoc
 // @Summary      Connections a service's package declares it needs
 // @Tags         platform-services
@@ -372,6 +361,17 @@ func (h *ServiceHandler) GetServiceInputs(c *gin.Context) {
 	c.JSON(http.StatusOK, inputs)
 }
 
+// GetServiceSchema godoc
+// @Summary      Get JSON Schema for a platform service
+// @Description  Returns the JSON Schema (parameters with UI metadata) for a given service version
+// @Tags         platform-services
+// @Produce      json
+// @Param        serviceName path string true "Service name"
+// @Param        tag query string false "Package version tag (defaults to Context CR tag)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/platform-services/{serviceName}/schema [get]
 func (h *ServiceHandler) GetServiceSchema(c *gin.Context) {
 	serviceName := c.Param("serviceName")
 	tag := c.Query("tag")
