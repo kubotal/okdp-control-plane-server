@@ -47,7 +47,7 @@ func (h *ConnectionHandler) GetConnectionTypes(c *gin.Context) {
 // @Param        name path string true "Project name (= Kubernetes namespace)"
 // @Success      200  {array}   models.ConnectionResponse
 // @Failure      500  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections [get]
+// @Router       /api/projects/{name}/connections [get]
 func (h *ConnectionHandler) ListConnections(c *gin.Context) {
 	h.list(c, projectNamespace(c))
 }
@@ -112,7 +112,7 @@ func (h *ConnectionHandler) ListConsumers(c *gin.Context) {
 // @Param        name path string true "Project name (= Kubernetes namespace)"
 // @Success      200  {array}   models.InternalConnection
 // @Failure      500  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections/internal [get]
+// @Router       /api/projects/{name}/connections/internal [get]
 func (h *ConnectionHandler) ListInternalConnections(c *gin.Context) {
 	connections, err := h.service.ListInternal(c.Request.Context(), projectNamespace(c))
 	if err != nil {
@@ -135,7 +135,7 @@ func (h *ConnectionHandler) ListInternalConnections(c *gin.Context) {
 // @Failure      400  {object}  map[string]string
 // @Failure      409  {object}  map[string]string
 // @Failure      501  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections [post]
+// @Router       /api/projects/{name}/connections [post]
 func (h *ConnectionHandler) CreateConnection(c *gin.Context) {
 	h.create(c, projectNamespace(c))
 }
@@ -173,7 +173,7 @@ func (h *ConnectionHandler) create(c *gin.Context, namespace string) {
 // @Failure      400  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Failure      501  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections/{connName} [put]
+// @Router       /api/projects/{name}/connections/{connName} [put]
 func (h *ConnectionHandler) UpdateConnection(c *gin.Context) {
 	h.update(c, projectNamespace(c))
 }
@@ -203,7 +203,7 @@ func (h *ConnectionHandler) update(c *gin.Context, namespace string) {
 // @Success      204
 // @Failure      404  {object}  map[string]string
 // @Failure      501  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections/{connName} [delete]
+// @Router       /api/projects/{name}/connections/{connName} [delete]
 func (h *ConnectionHandler) DeleteConnection(c *gin.Context) {
 	h.delete(c, projectNamespace(c))
 }
@@ -226,7 +226,7 @@ func (h *ConnectionHandler) delete(c *gin.Context, namespace string) {
 // @Param        request body models.ConnectionTestRequest true "Connection settings to probe"
 // @Success      200  {object}  models.ConnectionTestResult
 // @Failure      400  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections/test [post]
+// @Router       /api/projects/{name}/connections/test [post]
 func (h *ConnectionHandler) TestConnection(c *gin.Context) {
 	h.test(c)
 }
