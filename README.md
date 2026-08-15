@@ -109,6 +109,10 @@ helm install okdp-control-plane-server oci://quay.io/okdp/charts/okdp-control-pl
   -n okdp-system --create-namespace
 ```
 
+> The chart was renamed from `okdp-server` to match this repository. Only
+> `okdp-server` is published on Quay today, so this path resolves once the rename
+> lands upstream. Until then, install from `chart/` in this checkout.
+
 Once the pod is `Running`, reach the API through a port-forward:
 
 ```sh
