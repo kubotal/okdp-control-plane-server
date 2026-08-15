@@ -52,7 +52,8 @@ type ConnectionSpec struct {
 	// connection type. KuboCD defaults it to 100.
 	Priority int `json:"priority,omitempty"`
 	// Values holds the connection settings. Credentials are never stored here:
-	// they live in a Kubernetes Secret referenced through valuesFrom.
+	// they live in a Kubernetes Secret whose name the values carry under the
+	// secretRef key, which the ConnectionTypes declare for that purpose.
 	Values map[string]any `json:"values,omitempty"`
 	// OutputName is set by the KuboCD release controller on the connections it
 	// manages, and is empty on the ones a user declared. It is what separates
