@@ -78,8 +78,8 @@ providers declaratively, without restarting the server.
 
 | `identity.provider` | `/api/v1/identity` | UI Identity section | `provisioning.provider` | OIDC client cleanup on service delete |
 |---|---|---|---|---|
-| `external` (default) | 404, endpoints off | hidden | `none` (default) | no-op |
-| `external` | 404 | hidden | `keycloak` | Keycloak Admin API |
+| `external` (default) | 501, endpoints off | hidden | `none` (default) | no-op |
+| `external` | 501 | hidden | `keycloak` | Keycloak Admin API |
 | `kubauth` | active (kubauth CRDs) | shown | `kubauth` | kubauth `OidcClient` CRD |
 
 The two axes are independent: e.g. an external Keycloak for identities
@@ -149,8 +149,8 @@ Handler → service → repository pattern, no breaking change:
   `identity.kubauth.namespace` (legacy `kubauth.namespace` still honored).
 - `internal/service/capability_service.go` — derives capabilities from the Context.
 - `internal/api/handlers/capabilities_handler.go` — `GET /api/capabilities` +
-  `RequireIdentityAPI()` gin middleware gating the `/api/v1/identity` group (404 when
-  `identity.provider != kubauth`).
+  `RequireIdentityAPI()` gin middleware gating the `/api/v1/identity` group (501 when
+  `identity.provider != kubauth`, or when it is kubauth and the CRDs are absent).
 - `internal/repository/provisioning/` — `OidcClientProvisioner` contract, `none`/
   `kubauth`/`keycloak` adapters, Context-driven selector.
 - `internal/repository/identity_repository.go` — kubauth namespace resolved per call
@@ -161,8 +161,8 @@ Handler → service → repository pattern, no breaking change:
 - Existing kubauth-based environments keep working: set `identity.provider: kubauth`
   (and optionally `identity.kubauth.namespace`; the legacy `kubauth.namespace` key and
   `PLATFORM_NAMESPACE` fallback are preserved).
-- Environments without kubauth see the Identity endpoints disappear behind 404 — which
-  matches reality (they were failing against missing CRDs anyway).
+- Environments without kubauth get a 501 on the Identity endpoints, where they used to
+  fail against missing CRDs.
 - No endpoint is removed; no request/response schema changes.
 
 ## 6. Decisions
@@ -172,7 +172,7 @@ Handler → service → repository pattern, no breaking change:
 | 1 | Remove or gate the Identity API? | **Gate.** kubauth remains a supported optional fallback (#25); removal would break sandbox/time-to-market use cases. |
 | 2 | Neutral users/groups abstraction? | **No.** The API stays kubauth-specific; only OIDC client provisioning gets a provider-neutral contract. |
 | 3 | Gate resolution | Per request from the Context (no restart to switch providers). Cost: one Context GET per identity/capabilities call — acceptable, consistent with the rest of the server. |
-| 4 | Disabled response code | `404` (the endpoints are not part of the platform's surface), with an explanatory body pointing to `/api/capabilities`. |
+| 4 | Disabled response code | `501`, carrying the `FeatureUnavailable` body the other optional features already answer (`reason: feature-not-installed`) and pointing to `/api/capabilities`. A 404 would not be distinguishable from a wrong path. |
 | 5 | `EnsureClient` call sites | Not wired yet: packages register their own clients declaratively today. The contract ships now so adapters are complete; wiring at deploy time is follow-up work. |
 
 ## 7. Implementation status
