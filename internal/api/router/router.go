@@ -134,8 +134,6 @@ func SetupRouter(cfg *config.Config, projectHandler *handlers.ProjectHandler, id
 			services.GET("/:serviceName/metrics", serviceHandler.GetServiceMetrics)
 		}
 
-		// Self-service catalog (additional packages, no OKDP management)
-
 		// Spark config (from Context) + CRD schema
 		api.GET("/spark-config", sparkHandler.GetSparkConfig)
 		api.GET("/spark-app-schema", sparkHandler.GetSparkAppSchema)

@@ -66,7 +66,7 @@ func main() {
 	// carrying the label okdp.io/project)
 	projectRepo := repository.NewProjectRepository(k8sTypedClient)
 	contextWriterRepo := repository.NewContextWriterRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace)
-	projectService := service.NewDefaultProjectService(projectRepo, contextWriterRepo)
+	projectService := service.NewDefaultProjectService(projectRepo)
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	// Initialize Identity stack

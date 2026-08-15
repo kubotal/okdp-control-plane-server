@@ -20,16 +20,12 @@ type ProjectService interface {
 
 // DefaultProjectService is the default implementation of ProjectService
 type DefaultProjectService struct {
-	repo             repository.ProjectRepository
-	contextWriteRepo repository.ContextWriterRepository
+	repo repository.ProjectRepository
 }
 
 // NewDefaultProjectService creates a new DefaultProjectService
-func NewDefaultProjectService(repo repository.ProjectRepository, contextWriteRepo repository.ContextWriterRepository) *DefaultProjectService {
-	return &DefaultProjectService{
-		repo:             repo,
-		contextWriteRepo: contextWriteRepo,
-	}
+func NewDefaultProjectService(repo repository.ProjectRepository) *DefaultProjectService {
+	return &DefaultProjectService{repo: repo}
 }
 
 // ListProjects returns all projects
