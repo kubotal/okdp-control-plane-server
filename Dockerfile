@@ -2,10 +2,12 @@ ARG GO_VERSION=1.25
 # Released kubocd, used when KUBOCD_SOURCE=release.
 ARG KUBOCD_VERSION=v0.3.0
 # Source-built kubocd, the default: no release understands connectionRef yet.
+# Tracks release/v0.3.2, which carries connectionRef and the ConnectionType
+# rename. Switch to KUBOCD_SOURCE=release once v0.3.2 is tagged.
 # Its own Go version, which its go.mod pins ahead of ours.
 ARG KUBOCD_GO_VERSION=1.26
 ARG KUBOCD_REPO=https://github.com/kubocd/kubocd.git
-ARG KUBOCD_REF=ec14066c39646669f12feac99035e8caf6c64430
+ARG KUBOCD_REF=b488caff125da2439bcd7c5ef329744620bd7512
 
 # Cross-compile on the native build platform (no QEMU emulation): the Go
 # toolchain runs natively and emits a static binary for the target arch.
