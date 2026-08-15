@@ -19,6 +19,12 @@ external list at platform scope for connections shared by every project.
 
 ## 2. Current state
 
+> Sections 2 and 10 describe the state at the time this proposal was written, and are kept as the
+> context its decisions were taken in. Two things have moved since. The kinds `Interface` and
+> `ClusterInterface` are now named `ConnectionType` and `ClusterConnectionType`, and the whole
+> subsystem is heading for the KuboCD v0.3.2 release, where it ships as experimental. The decision
+> not to depend on a KuboCD branch still holds: the server probes the cluster and degrades cleanly.
+
 - KuboCD models this already, on the **`feat/connection2` branch** (Serge's work): `Connection`,
   `ClusterConnection`, `Interface`, `ClusterInterface`. `ConnectionSpec.outputName` separates
   connections the release controller **manages** (a deployed Trino publishing what it exposes)
