@@ -550,4 +550,3 @@ func (h *ServiceHandler) GetPodLogs(c *gin.Context) {
 		c.DataFromReader(http.StatusOK, -1, "text/plain; charset=utf-8", stream, nil)
 	}
 }
-

@@ -24,7 +24,6 @@ type ContextRepository interface {
 	// GetPlatformServices returns the managed OKDP services (from spec.context.okdp.services).
 	GetPlatformServices(ctx context.Context) ([]models.PlatformService, error)
 
-
 	// GetPackageRepository returns the OCI package repository prefix (from spec.context.okdp.packageRepository).
 	GetPackageRepository(ctx context.Context) (string, error)
 

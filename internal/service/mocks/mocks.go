@@ -332,7 +332,6 @@ func (m *ServiceService) WatchServices(ctx context.Context, project string) (wat
 	return args.Get(0).(watch.Interface), args.Error(1)
 }
 
-
 func (m *ServiceService) GetIngressSuffix(ctx context.Context) (string, error) {
 	args := m.Called(ctx)
 	return args.String(0), args.Error(1)

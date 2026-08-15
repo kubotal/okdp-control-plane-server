@@ -65,4 +65,3 @@ type ServiceConnection struct {
 	// Resolved is false while the release is still waiting for it.
 	Resolved bool `json:"resolved"`
 }
-
