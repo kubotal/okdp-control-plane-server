@@ -62,28 +62,19 @@ func (h *ConnectionHandler) list(c *gin.Context, namespace string) {
 	c.JSON(http.StatusOK, connections)
 }
 
-// ListInternalConnections godoc
-// @Summary      List the internal connections of a project
-// @Description  Connections provided by the services already deployed in the project, that the project's other services can consume
-// @Tags         connections
-// @Produce      json
-// @Param        name path string true "Project name (= Kubernetes namespace)"
-// @Success      200  {array}   models.InternalConnection
-// @Failure      500  {object}  map[string]string
-// @Router       /api/projects/{projectId}/connections/internal [get]
 // ListSelectable godoc
-// @Summary      Connections offered for a package input of a given interface
+// @Summary      Connections offered for a package input of a given connection type
 // @Tags         connections
 // @Produce      json
 // @Param        name path string true "Project name"
-// @Param        interface query string false "Interface the connections must satisfy"
+// @Param        connectionType query string false "Connection type the connections must satisfy"
 // @Success      200 {array} models.SelectableConnection
 // @Router       /api/projects/{name}/connections/selectable [get]
 func (h *ConnectionHandler) ListSelectable(c *gin.Context) {
 	project := c.Param("name")
-	iface := c.Query("interface")
+	connectionType := c.Query("connectionType")
 
-	connections, err := h.service.ListSelectable(c.Request.Context(), project, iface)
+	connections, err := h.service.ListSelectable(c.Request.Context(), project, connectionType)
 	if err != nil {
 		logrus.WithError(err).WithField("project", project).Error("Failed to list selectable connections")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list selectable connections"})
@@ -113,6 +104,15 @@ func (h *ConnectionHandler) ListConsumers(c *gin.Context) {
 	c.JSON(http.StatusOK, consumers)
 }
 
+// ListInternalConnections godoc
+// @Summary      List the internal connections of a project
+// @Description  Connections provided by the services already deployed in the project, that the project's other services can consume
+// @Tags         connections
+// @Produce      json
+// @Param        name path string true "Project name (= Kubernetes namespace)"
+// @Success      200  {array}   models.InternalConnection
+// @Failure      500  {object}  map[string]string
+// @Router       /api/projects/{projectId}/connections/internal [get]
 func (h *ConnectionHandler) ListInternalConnections(c *gin.Context) {
 	connections, err := h.service.ListInternal(c.Request.Context(), projectNamespace(c))
 	if err != nil {

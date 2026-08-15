@@ -544,17 +544,17 @@ func inputsOf(doc map[string]any) []models.PackageInput {
 		if !ok {
 			continue
 		}
-		iface, _ := entry["connectionType"].(string)
-		if iface == "" {
+		connectionType, _ := entry["connectionType"].(string)
+		if connectionType == "" {
 			continue
 		}
 
-		input := models.PackageInput{Interface: iface}
+		input := models.PackageInput{ConnectionType: connectionType}
 		if alias, _ := entry["alias"].(string); alias != "" {
 			input.Alias = alias
 		} else {
 			// The package format defaults the alias to the connection type name.
-			input.Alias = iface
+			input.Alias = connectionType
 		}
 		// KcdTemplateBool fields arrive as template strings, so a literal true
 		// is the string "true", not a boolean.
@@ -623,8 +623,8 @@ func inputsFromMarkers(doc map[string]any) []models.PackageInput {
 		if !ok {
 			continue
 		}
-		iface, _ := marker["connectionType"].(string)
-		if iface == "" {
+		connectionType, _ := marker["connectionType"].(string)
+		if connectionType == "" {
 			continue
 		}
 		description, _ := property["description"].(string)
@@ -633,12 +633,12 @@ func inputsFromMarkers(doc map[string]any) []models.PackageInput {
 		// None, which reads as "nothing", the opposite of the truth.
 		defaultValue, _ := property["default"].(string)
 		inputs = append(inputs, models.PackageInput{
-			Alias:       name,
-			Interface:   iface,
-			Parameter:   name,
-			Optional:    !required[name],
-			Default:     defaultValue,
-			Description: description,
+			Alias:          name,
+			ConnectionType: connectionType,
+			Parameter:      name,
+			Optional:       !required[name],
+			Default:        defaultValue,
+			Description:    description,
 		})
 	}
 	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Parameter < inputs[j].Parameter })

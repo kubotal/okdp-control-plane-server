@@ -26,8 +26,8 @@ var connectionTypesFS embed.FS
 // cluster-provided schemas take precedence over the built-in ones, without any
 // change to the callers or to the API contract.
 type ConnectionTypeCatalog interface {
-	List() []models.ConnectionType
-	Get(name string) (*models.ConnectionType, bool)
+	List() []models.ConnectionTypeDescriptor
+	Get(name string) (*models.ConnectionTypeDescriptor, bool)
 	// Validate checks submitted values against the type descriptor.
 	Validate(typeName string, values map[string]any) error
 	// ValidateUpdate is Validate for an edit. The console does not resend a
@@ -41,8 +41,8 @@ type ConnectionTypeCatalog interface {
 }
 
 type embeddedCatalog struct {
-	types  []models.ConnectionType
-	byName map[string]*models.ConnectionType
+	types  []models.ConnectionTypeDescriptor
+	byName map[string]*models.ConnectionTypeDescriptor
 }
 
 // NewEmbeddedConnectionTypeCatalog loads the built-in connection types. It fails
@@ -54,7 +54,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 		return nil, fmt.Errorf("failed to read embedded connection types: %w", err)
 	}
 
-	c := &embeddedCatalog{byName: map[string]*models.ConnectionType{}}
+	c := &embeddedCatalog{byName: map[string]*models.ConnectionTypeDescriptor{}}
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
@@ -64,7 +64,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read connection type %s: %w", entry.Name(), err)
 		}
-		var ct models.ConnectionType
+		var ct models.ConnectionTypeDescriptor
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&ct); err != nil {
@@ -89,7 +89,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 	return c, nil
 }
 
-func validateTypeDescriptor(ct *models.ConnectionType) error {
+func validateTypeDescriptor(ct *models.ConnectionTypeDescriptor) error {
 	if ct.Name == "" {
 		return fmt.Errorf("name is required")
 	}
@@ -118,13 +118,13 @@ func validateTypeDescriptor(ct *models.ConnectionType) error {
 	return nil
 }
 
-func (c *embeddedCatalog) List() []models.ConnectionType {
-	out := make([]models.ConnectionType, len(c.types))
+func (c *embeddedCatalog) List() []models.ConnectionTypeDescriptor {
+	out := make([]models.ConnectionTypeDescriptor, len(c.types))
 	copy(out, c.types)
 	return out
 }
 
-func (c *embeddedCatalog) Get(name string) (*models.ConnectionType, bool) {
+func (c *embeddedCatalog) Get(name string) (*models.ConnectionTypeDescriptor, bool) {
 	ct, ok := c.byName[name]
 	return ct, ok
 }
