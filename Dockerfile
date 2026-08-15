@@ -7,7 +7,7 @@ ARG KUBOCD_VERSION=v0.3.0
 # Its own Go version, which its go.mod pins ahead of ours.
 ARG KUBOCD_GO_VERSION=1.26
 ARG KUBOCD_REPO=https://github.com/kubocd/kubocd.git
-ARG KUBOCD_REF=b488caff125da2439bcd7c5ef329744620bd7512
+ARG KUBOCD_REF=d73e3c05ab3b064a9dd695abe3934326a74850e8
 
 # Cross-compile on the native build platform (no QEMU emulation): the Go
 # toolchain runs natively and emits a static binary for the target arch.
