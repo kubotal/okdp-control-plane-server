@@ -11,8 +11,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
-// twoContexts stands in for our split: the console Context on one side, the
-// platform Context on the other, both empty of the keys under test.
+// twoContexts builds the console and platform Contexts, both empty.
 func twoContexts(t *testing.T) *dynamicfake.FakeDynamicClient {
 	t.Helper()
 	scheme := runtime.NewScheme()
@@ -31,10 +30,6 @@ func twoContexts(t *testing.T) *dynamicfake.FakeDynamicClient {
 		empty("okdp-control-plane"), empty("platform"))
 }
 
-// A missing key must send the reader to the Context that was actually read.
-// Both of these live in the platform Context, and both used to name the console
-// one, which sends whoever debugs a broken form editing a file where the key was
-// never meant to be.
 func TestPlatformKeysNameThePlatformContext(t *testing.T) {
 	repo := NewContextRepository(twoContexts(t),
 		"okdp-control-plane", "kubocd-system", "platform", "kubocd-system")
@@ -66,7 +61,6 @@ func TestPlatformKeysNameThePlatformContext(t *testing.T) {
 	}
 }
 
-// And a key of the console Context still names that one.
 func TestConsoleKeyNamesTheConsoleContext(t *testing.T) {
 	repo := NewContextRepository(twoContexts(t),
 		"okdp-control-plane", "kubocd-system", "platform", "kubocd-system")

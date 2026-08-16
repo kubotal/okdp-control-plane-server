@@ -33,11 +33,9 @@ func (h *CapabilitiesHandler) GetCapabilities(c *gin.Context) {
 	c.JSON(http.StatusOK, caps)
 }
 
-// RequireIdentityAPI gates the kubauth-specific identity endpoints. Two things
-// can make them unavailable and they do not mean the same: the platform may run
-// on another identity provider, or it may declare kubauth without the cluster
-// carrying its CRDs, which is a misconfiguration worth naming. Both answer the
-// 501 contract the console already knows, only the message differs. The
+// RequireIdentityAPI gates the identity endpoints on two conditions: the
+// configured provider must be kubauth, and its CRDs must be installed. Both
+// answer 501 with the FeatureUnavailable contract, with a distinct message. The
 // provider is resolved per request, so switching it needs no restart.
 func (h *CapabilitiesHandler) RequireIdentityAPI(crdsInstalled func(c *gin.Context) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {

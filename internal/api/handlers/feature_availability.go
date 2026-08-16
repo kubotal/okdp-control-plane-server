@@ -21,7 +21,7 @@ type FeatureUnavailable struct {
 const ReasonFeatureNotInstalled = "feature-not-installed"
 
 // identityFeature names the identity surface in FeatureUnavailable bodies. The
-// console keys off it, so it stays stable across the reasons it can be absent.
+// console keys off it, so it must stay stable.
 const identityFeature = "kubauth identity"
 
 // abortUnavailable answers 501 and reports true when the feature is absent, so

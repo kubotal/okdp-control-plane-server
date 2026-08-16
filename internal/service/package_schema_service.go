@@ -405,10 +405,7 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 }
 
 // splitOptions cuts the option segment of a title on spaces, except inside
-// double quotes. Splitting on every space truncated any value that held one,
-// which every `placeholder:e.g. 10Gi` in the wild does: the form ended up
-// suggesting "e.g." and nothing else. Quoting is the opt-in, so unquoted
-// options keep splitting exactly as before.
+// double quotes. Unquoted values cannot hold a space.
 func splitOptions(segment string) []string {
 	var options []string
 	var current strings.Builder

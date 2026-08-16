@@ -12,7 +12,6 @@ import (
 	"github.com/okdp/okdp-control-plane-server/internal/models"
 )
 
-// fakeCapabilities answers whatever the case under test needs.
 type fakeCapabilities struct {
 	enabled bool
 	err     error
@@ -26,8 +25,7 @@ func (f fakeCapabilities) IdentityAPIEnabled(context.Context) (bool, error) {
 	return f.enabled, f.err
 }
 
-// identityGuarded builds the identity group as the router does, over the two
-// conditions the gate resolves.
+// identityGuarded builds the identity group as the router does.
 func identityGuarded(providerIsKubauth, crdsInstalled bool) *gin.Engine {
 	handler := NewCapabilitiesHandler(fakeCapabilities{enabled: providerIsKubauth})
 	engine := gin.New()
@@ -53,10 +51,6 @@ func unavailableBody(t *testing.T, raw []byte) FeatureUnavailable {
 	return body
 }
 
-// A platform on another identity provider is not a broken server and not a
-// missing route. It answers the same 501 contract as any absent feature, so the
-// console shows "not available here" instead of its red panel, and stops
-// polling. Answering 404 here is what broke that.
 func TestAnotherProviderAnswers501(t *testing.T) {
 	response := call(identityGuarded(false, false), http.MethodGet, "/api/v1/identity/users")
 
@@ -69,8 +63,6 @@ func TestAnotherProviderAnswers501(t *testing.T) {
 	}
 }
 
-// Declaring kubauth without installing its CRDs is a misconfiguration, and the
-// message has to say so rather than repeat the provider line.
 func TestKubauthWithoutCRDsNamesTheMisconfiguration(t *testing.T) {
 	response := call(identityGuarded(true, false), http.MethodGet, "/api/v1/identity/users")
 
@@ -91,8 +83,6 @@ func TestKubauthWithCRDsPassesThrough(t *testing.T) {
 	}
 }
 
-// A Context the server cannot read is a real fault, and must not be reported as
-// a feature that was never installed.
 func TestUnreadableContextStays500(t *testing.T) {
 	handler := NewCapabilitiesHandler(fakeCapabilities{err: errors.New("context unreachable")})
 	engine := gin.New()
