@@ -47,11 +47,8 @@ func SetupRouter(cfg *config.Config, capabilitiesHandler *handlers.CapabilitiesH
 		// here rather than in each handler, so a route added later cannot slip
 		// through unguarded.
 		identity := api.Group("/v1/identity",
-			capabilitiesHandler.RequireIdentityAPI(),
-			handlers.RequireFeature(
+			capabilitiesHandler.RequireIdentityAPI(
 				func(c *gin.Context) bool { return identityHandler.Available(c.Request.Context()) },
-				"kubauth identity",
-				"Identity management is not available on this cluster: the kubauth CRDs are not installed.",
 			),
 		)
 		{
