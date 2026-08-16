@@ -86,3 +86,14 @@ func TestPlainTitleIsLeftAlone(t *testing.T) {
 		}
 	}
 }
+
+func TestUnbalancedQuoteKeepsTheOtherOptions(t *testing.T) {
+	p := prop(t, `Storage | Size | | order:1 placeholder:"e.g. 10Gi columns:2`)
+
+	if got := p["x-ui-columns"]; got != 2 {
+		t.Errorf("expected columns to survive an unbalanced quote, got %v", got)
+	}
+	if got := p["x-ui-order"]; got != 1 {
+		t.Errorf("expected order 1, got %v", got)
+	}
+}

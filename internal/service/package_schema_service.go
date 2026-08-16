@@ -407,6 +407,13 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 // splitOptions cuts the option segment of a title on spaces, except inside
 // double quotes. Unquoted values cannot hold a space.
 func splitOptions(segment string) []string {
+	// An unbalanced quote would swallow every option after it. Splitting on
+	// spaces truncates one value instead of dropping the rest silently.
+	if strings.Count(segment, `"`)%2 != 0 {
+		logrus.Warnf("unbalanced quote in title options %q, falling back to splitting on spaces", segment)
+		return strings.Fields(segment)
+	}
+
 	var options []string
 	var current strings.Builder
 	inQuotes := false
