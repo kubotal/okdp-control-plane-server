@@ -167,7 +167,7 @@ func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, er
 	}
 	suffix, _, _ := unstructured.NestedString(u.Object, "spec", "context", "ingress", "suffix")
 	if suffix == "" {
-		return "", fmt.Errorf("ingress.suffix not found in Context %s/%s", r.namespace, r.name)
+		return "", fmt.Errorf("ingress.suffix not found in Context %s/%s", r.platformNamespace, r.platformName)
 	}
 	return suffix, nil
 }
@@ -331,7 +331,7 @@ func (r *k8sContextRepository) GetSparkConfig(ctx context.Context) (*models.Spar
 		return nil, fmt.Errorf("failed to read sparkOperator from Context: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("sparkOperator not found in Context %s/%s", r.namespace, r.name)
+		return nil, fmt.Errorf("sparkOperator not found in Context %s/%s", r.platformNamespace, r.platformName)
 	}
 
 	cfg := &models.SparkConfig{}
