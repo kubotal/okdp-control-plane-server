@@ -404,6 +404,38 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 	return groomedDoc, nil
 }
 
+// splitOptions cuts the option segment of a title on spaces, except inside
+// double quotes. Splitting on every space truncated any value that held one,
+// which every `placeholder:e.g. 10Gi` in the wild does: the form ended up
+// suggesting "e.g." and nothing else. Quoting is the opt-in, so unquoted
+// options keep splitting exactly as before.
+func splitOptions(segment string) []string {
+	var options []string
+	var current strings.Builder
+	inQuotes := false
+
+	flush := func() {
+		if current.Len() > 0 {
+			options = append(options, current.String())
+			current.Reset()
+		}
+	}
+
+	for _, r := range segment {
+		switch {
+		case r == '"':
+			inQuotes = !inQuotes
+			current.WriteRune(r)
+		case r == ' ' && !inQuotes:
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return options
+}
+
 // parseTitleMetadata reads the `title` field from each property and expands it
 // into `x-ui-*` fields.
 //
@@ -411,7 +443,8 @@ func (s *DefaultPackageSchemaService) fetchGroomedDoc(ociRef string, insecure bo
 //   - Segment 1: group name (becomes x-ui-group)
 //   - Segment 2: display label (replaces title)
 //   - Segment 3: widget name (becomes x-ui-widget, empty = auto-detect)
-//   - Segment 4+: space-separated key:value pairs (become x-ui-<key>)
+//   - Segment 4+: space-separated key:value pairs (become x-ui-<key>).
+//     Quote a value that holds spaces: placeholder:"e.g. 10Gi, 50Gi".
 //
 // If title has no "|" separators, it's treated as a plain label (no UI hints).
 func parseTitleMetadata(schema map[string]any) map[string]any {
@@ -457,13 +490,13 @@ func parseTitleMetadata(schema map[string]any) map[string]any {
 		}
 
 		if len(parts) >= 4 && parts[3] != "" {
-			for _, kv := range strings.Fields(parts[3]) {
+			for _, kv := range splitOptions(parts[3]) {
 				eqIdx := strings.Index(kv, ":")
 				if eqIdx < 0 {
 					continue
 				}
 				key := kv[:eqIdx]
-				val := kv[eqIdx+1:]
+				val := strings.Trim(kv[eqIdx+1:], `"`)
 
 				switch key {
 				case "condition":
