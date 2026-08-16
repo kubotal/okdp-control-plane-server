@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestCatalog(t *testing.T) ConnectionTypeCatalog {
+func newTestCatalog(t *testing.T) ContractCatalog {
 	t.Helper()
-	catalog, err := NewEmbeddedConnectionTypeCatalog()
-	require.NoError(t, err, "the embedded connection types must all parse")
+	catalog, err := NewEmbeddedContractCatalog()
+	require.NoError(t, err, "the embedded contracts must all parse")
 	return catalog
 }
 
@@ -22,7 +22,7 @@ func TestEmbeddedCatalogLoadsBuiltInTypes(t *testing.T) {
 		names[ct.Name] = true
 	}
 
-	// One descriptor per ClusterConnectionType the platform publishes.
+	// One descriptor per ClusterContract the platform publishes.
 	assert.True(t, names["database-server"])
 	assert.True(t, names["s3"])
 	assert.True(t, names["trino"])
@@ -45,7 +45,7 @@ func TestEveryTypeWithCredentialsMarksThemSecret(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, s3.SecretFields(), "secretKey")
 	// Both halves of an S3 identity go to the Secret. Not because a key ID is a
-	// secret on its own, it is not, but because the s3 ConnectionType declares a Secret
+	// secret on its own, it is not, but because the s3 Contract declares a Secret
 	// "with keys: accessKey, secretKey" and consuming packages read both from it.
 	assert.Contains(t, s3.SecretFields(), "accessKey", "the s3 contract expects the key ID in the Secret")
 }
@@ -169,7 +169,7 @@ func TestValidateRejectsUnknownType(t *testing.T) {
 	err := catalog.Validate("oracle", map[string]any{})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown connection type "oracle"`)
+	assert.Contains(t, err.Error(), `unknown contract "oracle"`)
 }
 
 func TestValidateAllowsOmittingOptionalFields(t *testing.T) {
@@ -267,7 +267,7 @@ func TestEndpointComesFromTheContract(t *testing.T) {
 
 // Every contract the platform publishes must be declarable, or the wizard
 // leaves the user stuck with "No compatible connection available" and no way to
-// create one. These are the five ClusterConnectionTypes of platform-packages: the
+// create one. These are the five ClusterContracts of platform-packages: the
 // OIDC provider is deliberately not among them, it is platform configuration
 // read from the Context, not something a project connects to.
 func TestEveryPlatformContractIsInTheCatalog(t *testing.T) {
@@ -275,7 +275,7 @@ func TestEveryPlatformContractIsInTheCatalog(t *testing.T) {
 
 	for _, name := range []string{"database-server", "s3", "trino", "hive", "iceberg-catalog"} {
 		ct, ok := catalog.Get(name)
-		require.True(t, ok, "%s is a ClusterConnectionType of the platform and must be declarable", name)
+		require.True(t, ok, "%s is a ClusterContract of the platform and must be declarable", name)
 		assert.True(t, ct.External, "%s must offer a creation form", name)
 	}
 }

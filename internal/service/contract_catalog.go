@@ -11,24 +11,24 @@ import (
 	"github.com/okdp/okdp-control-plane-server/internal/models"
 )
 
-// connectionTypesFS holds the built-in connection types. Adding a type is a
-// matter of dropping a JSON file here: the same descriptor drives the form
-// rendered by the console, the server-side validation of submitted values, and
-// the address shown for a connection of that contract.
+// contractsFS holds the built-in contracts. Adding one is a matter of dropping
+// a JSON file here: the same descriptor drives the form rendered by the
+// console, the server-side validation of submitted values, and the address
+// shown for a connection of that contract.
 //
-//go:embed connectiontypes/*.json
-var connectionTypesFS embed.FS
+//go:embed contracts/*.json
+var contractsFS embed.FS
 
-// ConnectionTypeCatalog exposes the known connection types.
+// ContractCatalog exposes the known contracts.
 //
-// It is deliberately an interface: once the KuboCD `ConnectionType` CRD is
-// available on the cluster, an implementation backed by it can be layered on so that
+// It is deliberately an interface: once the KuboCD `Contract` CRD is available
+// on the cluster, an implementation backed by it can be layered on so that
 // cluster-provided schemas take precedence over the built-in ones, without any
 // change to the callers or to the API contract.
-type ConnectionTypeCatalog interface {
-	List() []models.ConnectionTypeDescriptor
-	Get(name string) (*models.ConnectionTypeDescriptor, bool)
-	// Validate checks submitted values against the type descriptor.
+type ContractCatalog interface {
+	List() []models.ContractDescriptor
+	Get(name string) (*models.ContractDescriptor, bool)
+	// Validate checks submitted values against the contract descriptor.
 	Validate(typeName string, values map[string]any) error
 	// ValidateUpdate is Validate for an edit. The console does not resend a
 	// credential that has not changed, so a missing secret field is a value
@@ -41,37 +41,37 @@ type ConnectionTypeCatalog interface {
 }
 
 type embeddedCatalog struct {
-	types  []models.ConnectionTypeDescriptor
-	byName map[string]*models.ConnectionTypeDescriptor
+	types  []models.ContractDescriptor
+	byName map[string]*models.ContractDescriptor
 }
 
-// NewEmbeddedConnectionTypeCatalog loads the built-in connection types. It fails
-// at startup rather than at request time: a malformed descriptor is a build
-// mistake, not a runtime condition.
-func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
-	entries, err := connectionTypesFS.ReadDir("connectiontypes")
+// NewEmbeddedContractCatalog loads the built-in contracts. It fails at startup
+// rather than at request time: a malformed descriptor is a build mistake, not a
+// runtime condition.
+func NewEmbeddedContractCatalog() (ContractCatalog, error) {
+	entries, err := contractsFS.ReadDir("contracts")
 	if err != nil {
-		return nil, fmt.Errorf("failed to read embedded connection types: %w", err)
+		return nil, fmt.Errorf("failed to read embedded contracts: %w", err)
 	}
 
-	c := &embeddedCatalog{byName: map[string]*models.ConnectionTypeDescriptor{}}
+	c := &embeddedCatalog{byName: map[string]*models.ContractDescriptor{}}
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		raw, err := connectionTypesFS.ReadFile("connectiontypes/" + entry.Name())
+		raw, err := contractsFS.ReadFile("contracts/" + entry.Name())
 		if err != nil {
-			return nil, fmt.Errorf("failed to read connection type %s: %w", entry.Name(), err)
+			return nil, fmt.Errorf("failed to read contract %s: %w", entry.Name(), err)
 		}
-		var ct models.ConnectionTypeDescriptor
+		var ct models.ContractDescriptor
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&ct); err != nil {
-			return nil, fmt.Errorf("failed to parse connection type %s: %w", entry.Name(), err)
+			return nil, fmt.Errorf("failed to parse contract %s: %w", entry.Name(), err)
 		}
 		if err := validateTypeDescriptor(&ct); err != nil {
-			return nil, fmt.Errorf("invalid connection type %s: %w", entry.Name(), err)
+			return nil, fmt.Errorf("invalid contract %s: %w", entry.Name(), err)
 		}
 		c.types = append(c.types, ct)
 	}
@@ -81,7 +81,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 	for i := range c.types {
 		ct := &c.types[i]
 		if _, dup := c.byName[ct.Name]; dup {
-			return nil, fmt.Errorf("duplicate connection type %q", ct.Name)
+			return nil, fmt.Errorf("duplicate contract %q", ct.Name)
 		}
 		c.byName[ct.Name] = ct
 	}
@@ -89,7 +89,7 @@ func NewEmbeddedConnectionTypeCatalog() (ConnectionTypeCatalog, error) {
 	return c, nil
 }
 
-func validateTypeDescriptor(ct *models.ConnectionTypeDescriptor) error {
+func validateTypeDescriptor(ct *models.ContractDescriptor) error {
 	if ct.Name == "" {
 		return fmt.Errorf("name is required")
 	}
@@ -118,13 +118,13 @@ func validateTypeDescriptor(ct *models.ConnectionTypeDescriptor) error {
 	return nil
 }
 
-func (c *embeddedCatalog) List() []models.ConnectionTypeDescriptor {
-	out := make([]models.ConnectionTypeDescriptor, len(c.types))
+func (c *embeddedCatalog) List() []models.ContractDescriptor {
+	out := make([]models.ContractDescriptor, len(c.types))
 	copy(out, c.types)
 	return out
 }
 
-func (c *embeddedCatalog) Get(name string) (*models.ConnectionTypeDescriptor, bool) {
+func (c *embeddedCatalog) Get(name string) (*models.ContractDescriptor, bool) {
 	ct, ok := c.byName[name]
 	return ct, ok
 }
@@ -175,12 +175,12 @@ func (c *embeddedCatalog) Normalize(typeName string, values map[string]any) map[
 func (c *embeddedCatalog) validate(typeName string, values map[string]any, requireSecrets bool) error {
 	ct, ok := c.Get(typeName)
 	if !ok {
-		return fmt.Errorf("unknown connection type %q", typeName)
+		return fmt.Errorf("unknown contract %q", typeName)
 	}
 
 	for key := range values {
 		if _, known := ct.Field(key); !known {
-			return fmt.Errorf("unknown field %q for connection type %q", key, typeName)
+			return fmt.Errorf("unknown field %q for contract %q", key, typeName)
 		}
 	}
 

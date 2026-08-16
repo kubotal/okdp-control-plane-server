@@ -14,24 +14,24 @@ import (
 // selectableSpy embeds the interface so only the probed method needs a body.
 type selectableSpy struct {
 	service.ConnectionService
-	project        string
-	connectionType string
+	project  string
+	contract string
 }
 
-func (s *selectableSpy) ListSelectable(_ context.Context, project, connectionType string) ([]models.SelectableConnection, error) {
+func (s *selectableSpy) ListSelectable(_ context.Context, project, contract string) ([]models.SelectableConnection, error) {
 	s.project = project
-	s.connectionType = connectionType
+	s.contract = contract
 	return []models.SelectableConnection{}, nil
 }
 
 // Pins the wire names the console depends on. Every other test calls the service
 // directly, so nothing else would notice the query parameter being renamed.
-func TestListSelectableReadsTheConnectionTypeQuery(t *testing.T) {
+func TestListSelectableReadsTheContractQuery(t *testing.T) {
 	spy := &selectableSpy{}
 	engine := gin.New()
 	engine.GET("/api/projects/:name/connections/selectable", NewConnectionHandler(spy).ListSelectable)
 
-	recorder := call(engine, http.MethodGet, "/api/projects/demo/connections/selectable?connectionType=database-server")
+	recorder := call(engine, http.MethodGet, "/api/projects/demo/connections/selectable?contract=database-server")
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", recorder.Code)
@@ -39,15 +39,15 @@ func TestListSelectableReadsTheConnectionTypeQuery(t *testing.T) {
 	if spy.project != "demo" {
 		t.Errorf("project = %q, want demo", spy.project)
 	}
-	if spy.connectionType != "database-server" {
-		t.Errorf("connectionType = %q, want database-server: the console builds ?connectionType=", spy.connectionType)
+	if spy.contract != "database-server" {
+		t.Errorf("contract = %q, want database-server: the console builds ?contract=", spy.contract)
 	}
 }
 
-// An input with no declared connection type must still reach the service, which
+// An input with no declared contract must still reach the service, which
 // answers with everything selectable rather than nothing.
-func TestListSelectableToleratesAMissingConnectionType(t *testing.T) {
-	spy := &selectableSpy{connectionType: "untouched"}
+func TestListSelectableToleratesAMissingContract(t *testing.T) {
+	spy := &selectableSpy{contract: "untouched"}
 	engine := gin.New()
 	engine.GET("/api/projects/:name/connections/selectable", NewConnectionHandler(spy).ListSelectable)
 
@@ -56,7 +56,7 @@ func TestListSelectableToleratesAMissingConnectionType(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", recorder.Code)
 	}
-	if spy.connectionType != "" {
-		t.Errorf("connectionType = %q, want empty", spy.connectionType)
+	if spy.contract != "" {
+		t.Errorf("contract = %q, want empty", spy.contract)
 	}
 }

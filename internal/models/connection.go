@@ -16,7 +16,7 @@ const (
 	TestReasonUnknown       = "unknown"
 )
 
-// Field types accepted in a connection type descriptor.
+// Field types accepted in a contract descriptor.
 const (
 	FieldTypeString  = "string"
 	FieldTypeNumber  = "number"
@@ -24,7 +24,7 @@ const (
 	FieldTypeEnum    = "enum"
 )
 
-// ConnectionField describes a single input of a connection type.
+// ConnectionField describes a single input of a contract.
 type ConnectionField struct {
 	Name     string `json:"name"`
 	Label    string `json:"label"`
@@ -75,14 +75,15 @@ func (f *ConnectionField) Applies(values map[string]any) bool {
 	return current == f.ShowWhen.Value
 }
 
-// ConnectionTypeDescriptor describes one kind of connection. It drives the
-// form rendered by the console, the server-side validation of submitted
-// values, the recognition of deployed services as connection providers, and
-// the ready-to-use snippets shown when a connection is opened.
-type ConnectionTypeDescriptor struct {
-	// Name IS the KuboCD ConnectionType this descriptor produces. One type, one contract,
-	// deliberately: an entry form that produced a differently named contract
-	// would mean nothing a package asks for could be found by its own name.
+// ContractDescriptor describes one kind of connection. It drives the form
+// rendered by the console, the server-side validation of submitted values, the
+// recognition of deployed services as connection providers, and the
+// ready-to-use snippets shown when a connection is opened.
+type ContractDescriptor struct {
+	// Name IS the KuboCD Contract this descriptor produces. One descriptor, one
+	// contract, deliberately: an entry form that produced a differently named
+	// contract would mean nothing a package asks for could be found by its own
+	// name.
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
@@ -100,7 +101,7 @@ type ConnectionTypeDescriptor struct {
 }
 
 // Field returns the named field of the type.
-func (t *ConnectionTypeDescriptor) Field(name string) (*ConnectionField, bool) {
+func (t *ContractDescriptor) Field(name string) (*ConnectionField, bool) {
 	for i := range t.Fields {
 		if t.Fields[i].Name == name {
 			return &t.Fields[i], true
@@ -111,7 +112,7 @@ func (t *ConnectionTypeDescriptor) Field(name string) (*ConnectionField, bool) {
 
 // SecretFields lists the fields of the type that hold credentials. Their values
 // live in a Kubernetes Secret and never in the Connection spec.
-func (t *ConnectionTypeDescriptor) SecretFields() []string {
+func (t *ContractDescriptor) SecretFields() []string {
 	var names []string
 	for i := range t.Fields {
 		if t.Fields[i].Secret {
@@ -121,9 +122,9 @@ func (t *ConnectionTypeDescriptor) SecretFields() []string {
 	return names
 }
 
-// ConnectionCatalogResponse is the payload of GET /api/connection-types.
+// ConnectionCatalogResponse is the payload of GET /api/contracts.
 type ConnectionCatalogResponse struct {
-	Types []ConnectionTypeDescriptor `json:"types"`
+	Types []ContractDescriptor `json:"types"`
 	// CRDAvailable reports whether the KuboCD connection CRDs are installed.
 	// While they are not, external connections cannot be persisted and the
 	// console says so instead of failing on save; internal connections are
@@ -239,9 +240,9 @@ type PackageInput struct {
 	// Alias names the input in the package's templates, and is the key the
 	// console sends back when the user picks a connection.
 	Alias string `json:"alias"`
-	// ConnectionType is the contract the chosen connection must satisfy. It is what
-	// makes the choice safe: only connections of that type are offered.
-	ConnectionType string `json:"connectionType"`
+	// Contract names the contract the chosen connection must satisfy. It is what
+	// makes the choice safe: only connections of that contract are offered.
+	Contract string `json:"contract"`
 	// Parameter is the package parameter carrying the chosen connection name,
 	// derived from the input's namedConnection template. Empty when the input
 	// binds some other way, in which case the console offers no choice.

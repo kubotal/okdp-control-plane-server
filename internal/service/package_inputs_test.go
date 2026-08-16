@@ -10,15 +10,15 @@ func TestInputsOfReadsAPackageDeclaration(t *testing.T) {
 	var doc map[string]any
 	raw := `
 inputs:
-  - connectionType: s3
+  - contract: s3
     namedConnection:
       name: '{{ .Parameters.s3Connection | default "-" }}'
     alias: storage
     optional: "true"
-  - connectionType: postgresql
+  - contract: postgresql
     namedConnection:
       name: "{{ .Parameters.pgConnection }}"
-  - connectionType: trino
+  - contract: trino
     release:
       name: other
 `
@@ -33,7 +33,7 @@ inputs:
 	if inputs[0].Alias != "storage" || inputs[0].Parameter != "s3Connection" || !inputs[0].Optional {
 		t.Errorf("input 0 = %+v", inputs[0])
 	}
-	// Alias defaults to the connection type name.
+	// Alias defaults to the contract name.
 	if inputs[1].Alias != "postgresql" || inputs[1].Parameter != "pgConnection" {
 		t.Errorf("input 1 = %+v", inputs[1])
 	}
@@ -60,13 +60,13 @@ schema:
       metadataDb:
         type: string
         description: "Metadata database"
-        x-kubocd-connection-ref: { connectionType: postgresql }
+        x-kubocd-connection-ref: { contract: postgresql }
       pgConnection:
         type: string
-        x-kubocd-connection-ref: { connectionType: postgresql }
+        x-kubocd-connection-ref: { contract: postgresql }
       databases:
         type: string
-        x-kubocd-something-else: { connectionType: postgresql, required: true }
+        x-kubocd-something-else: { contract: postgresql, required: true }
 `
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ schema:
 	if inputs[0].Parameter != "metadataDb" || inputs[0].Optional {
 		t.Errorf("metadataDb = %+v, want required (listed in the parent's required array)", inputs[0])
 	}
-	if inputs[0].ConnectionType != "postgresql" || inputs[0].Description != "Metadata database" {
+	if inputs[0].Contract != "postgresql" || inputs[0].Description != "Metadata database" {
 		t.Errorf("metadataDb detail = %+v", inputs[0])
 	}
 	if inputs[1].Parameter != "pgConnection" || !inputs[1].Optional {

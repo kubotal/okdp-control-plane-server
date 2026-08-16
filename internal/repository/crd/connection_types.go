@@ -45,15 +45,15 @@ type Connection struct {
 }
 
 type ConnectionSpec struct {
-	// ConnectionType names the ConnectionType (or ClusterConnectionType) whose
-	// schema the values must satisfy.
-	ConnectionType string `json:"connectionType"`
+	// Contract names the Contract (or ClusterContract) whose schema the values
+	// must satisfy.
+	Contract string `json:"contract"`
 	// Priority arbitrates between several connections satisfying the same
-	// connection type. KuboCD defaults it to 100.
+	// contract. KuboCD defaults it to 100.
 	Priority int `json:"priority,omitempty"`
 	// Values holds the connection settings. Credentials are never stored here:
 	// they live in a Kubernetes Secret whose name the values carry under the
-	// secretRef key, which the ConnectionTypes declare for that purpose.
+	// secretRef key, which the Contracts declare for that purpose.
 	Values map[string]any `json:"values,omitempty"`
 	// OutputName is set by the KuboCD release controller on the connections it
 	// manages, and is empty on the ones a user declared. It is what separates
@@ -66,10 +66,10 @@ type ConnectionSpec struct {
 type ConnectionStatus struct {
 	Phase string `json:"phase,omitempty"`
 	// Parent is the release owning a managed connection.
-	Parent                string `json:"parent,omitempty"`
-	Message               string `json:"message,omitempty"`
-	ConnectionTypeKind    string `json:"connectionTypeKind,omitempty"`
-	ConnectionTypeDisplay string `json:"connectionTypeDisplay,omitempty"`
+	Parent          string `json:"parent,omitempty"`
+	Message         string `json:"message,omitempty"`
+	ContractKind    string `json:"contractKind,omitempty"`
+	ContractDisplay string `json:"contractDisplay,omitempty"`
 }
 
 // IsManaged reports whether the connection was produced by the KuboCD release

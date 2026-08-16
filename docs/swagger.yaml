@@ -18,7 +18,7 @@ definitions:
         type: boolean
       types:
         items:
-          $ref: '#/definitions/models.ConnectionTypeDescriptor'
+          $ref: '#/definitions/models.ContractDescriptor'
         type: array
     type: object
   models.ConnectionConsumer:
@@ -189,7 +189,16 @@ definitions:
       success:
         type: boolean
     type: object
-  models.ConnectionTypeDescriptor:
+  models.Container:
+    properties:
+      image:
+        type: string
+      name:
+        type: string
+      ready:
+        type: boolean
+    type: object
+  models.ContractDescriptor:
     properties:
       category:
         type: string
@@ -219,19 +228,11 @@ definitions:
         type: string
       name:
         description: |-
-          Name IS the KuboCD ConnectionType this descriptor produces. One type, one contract,
-          deliberately: an entry form that produced a differently named contract
-          would mean nothing a package asks for could be found by its own name.
+          Name IS the KuboCD Contract this descriptor produces. One descriptor, one
+          contract, deliberately: an entry form that produced a differently named
+          contract would mean nothing a package asks for could be found by its own
+          name.
         type: string
-    type: object
-  models.Container:
-    properties:
-      image:
-        type: string
-      name:
-        type: string
-      ready:
-        type: boolean
     type: object
   models.CredentialsSecretRef:
     properties:
@@ -479,10 +480,10 @@ definitions:
           Alias names the input in the package's templates, and is the key the
           console sends back when the user picks a connection.
         type: string
-      connectionType:
+      contract:
         description: |-
-          ConnectionType is the contract the chosen connection must satisfy. It is what
-          makes the choice safe: only connections of that type are offered.
+          Contract names the contract the chosen connection must satisfy. It is what
+          makes the choice safe: only connections of that contract are offered.
         type: string
       default:
         description: |-
@@ -995,10 +996,10 @@ paths:
       summary: Get platform capabilities
       tags:
       - capabilities
-  /api/connection-types:
+  /api/contracts:
     get:
-      description: Descriptors of every connection type, used to build the creation
-        form, plus whether connections can currently be persisted
+      description: Descriptors of every contract, used to build the creation form,
+        plus whether connections can currently be persisted
       produces:
       - application/json
       responses:
@@ -1006,7 +1007,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.ConnectionCatalogResponse'
-      summary: List the available connection types
+      summary: List the available contracts
       tags:
       - connections
   /api/platform-services:
@@ -1629,9 +1630,9 @@ paths:
         name: name
         required: true
         type: string
-      - description: Connection type the connections must satisfy
+      - description: Contract the connections must satisfy
         in: query
-        name: connectionType
+        name: contract
         type: string
       produces:
       - application/json
@@ -1642,7 +1643,7 @@ paths:
             items:
               $ref: '#/definitions/models.SelectableConnection'
             type: array
-      summary: Connections offered for a package input of a given connection type
+      summary: Connections offered for a package input of a given contract
       tags:
       - connections
   /api/projects/{name}/connections/test:

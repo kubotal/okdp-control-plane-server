@@ -28,14 +28,14 @@ func projectNamespace(c *gin.Context) string {
 	return c.Param("name")
 }
 
-// GetConnectionTypes godoc
-// @Summary      List the available connection types
-// @Description  Descriptors of every connection type, used to build the creation form, plus whether connections can currently be persisted
+// GetContracts godoc
+// @Summary      List the available contracts
+// @Description  Descriptors of every contract, used to build the creation form, plus whether connections can currently be persisted
 // @Tags         connections
 // @Produce      json
 // @Success      200  {object}  models.ConnectionCatalogResponse
-// @Router       /api/connection-types [get]
-func (h *ConnectionHandler) GetConnectionTypes(c *gin.Context) {
+// @Router       /api/contracts [get]
+func (h *ConnectionHandler) GetContracts(c *gin.Context) {
 	c.JSON(http.StatusOK, h.service.Catalog(c.Request.Context()))
 }
 
@@ -63,18 +63,18 @@ func (h *ConnectionHandler) list(c *gin.Context, namespace string) {
 }
 
 // ListSelectable godoc
-// @Summary      Connections offered for a package input of a given connection type
+// @Summary      Connections offered for a package input of a given contract
 // @Tags         connections
 // @Produce      json
 // @Param        name path string true "Project name"
-// @Param        connectionType query string false "Connection type the connections must satisfy"
+// @Param        contract query string false "Contract the connections must satisfy"
 // @Success      200 {array} models.SelectableConnection
 // @Router       /api/projects/{name}/connections/selectable [get]
 func (h *ConnectionHandler) ListSelectable(c *gin.Context) {
 	project := c.Param("name")
-	connectionType := c.Query("connectionType")
+	contract := c.Query("contract")
 
-	connections, err := h.service.ListSelectable(c.Request.Context(), project, connectionType)
+	connections, err := h.service.ListSelectable(c.Request.Context(), project, contract)
 	if err != nil {
 		logrus.WithError(err).WithField("project", project).Error("Failed to list selectable connections")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list selectable connections"})

@@ -44,16 +44,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/connection-types": {
+        "/api/contracts": {
             "get": {
-                "description": "Descriptors of every connection type, used to build the creation form, plus whether connections can currently be persisted",
+                "description": "Descriptors of every contract, used to build the creation form, plus whether connections can currently be persisted",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "connections"
                 ],
-                "summary": "List the available connection types",
+                "summary": "List the available contracts",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -851,7 +851,7 @@ const docTemplate = `{
                 "tags": [
                     "connections"
                 ],
-                "summary": "Connections offered for a package input of a given connection type",
+                "summary": "Connections offered for a package input of a given contract",
                 "parameters": [
                     {
                         "type": "string",
@@ -862,8 +862,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Connection type the connections must satisfy",
-                        "name": "connectionType",
+                        "description": "Contract the connections must satisfy",
+                        "name": "contract",
                         "in": "query"
                     }
                 ],
@@ -3112,7 +3112,7 @@ const docTemplate = `{
                 "types": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.ConnectionTypeDescriptor"
+                        "$ref": "#/definitions/models.ContractDescriptor"
                     }
                 }
             }
@@ -3334,7 +3334,21 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ConnectionTypeDescriptor": {
+        "models.Container": {
+            "type": "object",
+            "properties": {
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ready": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.ContractDescriptor": {
             "type": "object",
             "properties": {
                 "category": {
@@ -3367,22 +3381,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "description": "Name IS the KuboCD ConnectionType this descriptor produces. One type, one contract,\ndeliberately: an entry form that produced a differently named contract\nwould mean nothing a package asks for could be found by its own name.",
+                    "description": "Name IS the KuboCD Contract this descriptor produces. One descriptor, one\ncontract, deliberately: an entry form that produced a differently named\ncontract would mean nothing a package asks for could be found by its own\nname.",
                     "type": "string"
-                }
-            }
-        },
-        "models.Container": {
-            "type": "object",
-            "properties": {
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "ready": {
-                    "type": "boolean"
                 }
             }
         },
@@ -3730,8 +3730,8 @@ const docTemplate = `{
                     "description": "Alias names the input in the package's templates, and is the key the\nconsole sends back when the user picks a connection.",
                     "type": "string"
                 },
-                "connectionType": {
-                    "description": "ConnectionType is the contract the chosen connection must satisfy. It is what\nmakes the choice safe: only connections of that type are offered.",
+                "contract": {
+                    "description": "Contract names the contract the chosen connection must satisfy. It is what\nmakes the choice safe: only connections of that contract are offered.",
                     "type": "string"
                 },
                 "default": {

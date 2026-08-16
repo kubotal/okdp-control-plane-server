@@ -21,8 +21,8 @@ import (
 
 // AnnotationCredentialsSecret names the Secret holding the credential fields of
 // a connection. They are kept out of spec.values so that what the CRD stores
-// stays exactly the shape a KuboCD ConnectionType schema will validate, and so
-// that reading a Connection never discloses a password.
+// stays exactly the shape a KuboCD Contract schema will validate, and so that
+// reading a Connection never discloses a password.
 const AnnotationCredentialsSecret = "okdp.io/credentials-secret"
 
 // AnnotationCredentialsOwned records whether the console wrote that Secret or
@@ -37,8 +37,8 @@ const credentialsSecretSuffix = "-credentials"
 
 // valueSecretRef names the value published so a KuboCD package can bind the
 // credentials: the NAME of the Secret holding them, never a value. It matches
-// the secretRef field declared by the KuboCD ConnectionTypes, which are the
-// contract of record.
+// the secretRef field declared by the KuboCD Contracts, which are the schema of
+// record.
 //
 // A credentialsVersion digest used to be published alongside, so that rotating a
 // password changed the Connection and reached running pods. It was dropped: the
@@ -52,8 +52,8 @@ const valueSecretRef = "secretRef"
 // Throughout, an empty namespace addresses the platform (cluster-wide) scope,
 // matching ConnectionRepository.
 type ConnectionService interface {
-	// Catalog returns the known connection types and whether connections can
-	// currently be persisted.
+	// Catalog returns the known contracts and whether connections can currently
+	// be persisted.
 	Catalog(ctx context.Context) models.ConnectionCatalogResponse
 
 	List(ctx context.Context, namespace string) ([]models.ConnectionResponse, error)
@@ -70,9 +70,9 @@ type ConnectionService interface {
 	ListInternal(ctx context.Context, project string) ([]models.InternalConnection, error)
 
 	// ListSelectable returns the connections a deployment form can offer for an
-	// input of the given connection type: the project's own plus the
-	// platform-wide ones, managed included.
-	ListSelectable(ctx context.Context, project, connectionType string) ([]models.SelectableConnection, error)
+	// input of the given contract: the project's own plus the platform-wide
+	// ones, managed included.
+	ListSelectable(ctx context.Context, project, contract string) ([]models.SelectableConnection, error)
 
 	// ListConsumers returns the services of a project bound to a connection,
 	// read from what the release controller published rather than guessed.
@@ -82,13 +82,13 @@ type ConnectionService interface {
 type DefaultConnectionService struct {
 	repo        repository.ConnectionRepository
 	releaseRepo repository.ServiceRepository
-	catalog     ConnectionTypeCatalog
+	catalog     ContractCatalog
 }
 
 func NewDefaultConnectionService(
 	repo repository.ConnectionRepository,
 	releaseRepo repository.ServiceRepository,
-	catalog ConnectionTypeCatalog,
+	catalog ContractCatalog,
 ) *DefaultConnectionService {
 	return &DefaultConnectionService{
 		repo:        repo,
@@ -189,9 +189,9 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 		Spec: crd.ConnectionSpec{
 			// The type name IS the contract: a package asking for database-server
 			// finds it by that name, here and in the catalog.
-			ConnectionType: descriptor.Name,
-			Description:    req.Description,
-			Values:         public,
+			Contract:    descriptor.Name,
+			Description: req.Description,
+			Values:      public,
 		},
 	}
 	if len(secrets) > 0 || !ownSecret {
@@ -259,7 +259,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		}
 	}
 
-	existing.Spec.ConnectionType = descriptor.Name
+	existing.Spec.Contract = descriptor.Name
 	existing.Spec.Description = req.Description
 	existing.Spec.Values = public
 
@@ -333,7 +333,7 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 	}
 
 	if _, known := s.catalog.Get(req.Type); !known {
-		return result(false, models.TestReasonInvalidConfig, fmt.Sprintf("Unknown connection type %q.", req.Type))
+		return result(false, models.TestReasonInvalidConfig, fmt.Sprintf("Unknown contract %q.", req.Type))
 	}
 	// Normalize first, exactly as Create and Update do: the form does not send a
 	// derived field, so validating the raw payload would demand a JDBC driver
@@ -346,7 +346,7 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 
 	tester, ok := connectionTesters[req.Type]
 	if !ok {
-		return result(false, models.TestReasonInvalidConfig, "This connection type cannot be tested.")
+		return result(false, models.TestReasonInvalidConfig, "This contract cannot be tested.")
 	}
 
 	// A contract may publish several addresses. The verdict is the one a
@@ -411,8 +411,8 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 
 	entry := models.InternalConnection{
 		Name:        connection.Name,
-		Type:        connection.Spec.ConnectionType,
-		TypeDisplay: connection.Status.ConnectionTypeDisplay,
+		Type:        connection.Spec.Contract,
+		TypeDisplay: connection.Status.ContractDisplay,
 		Service:     connection.Labels[crd.LabelService],
 		ReleaseName: connection.Status.Parent,
 		Namespace:   project,
@@ -420,7 +420,7 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		Values:      values,
 		Managed:     true,
 	}
-	if descriptor, known := s.catalog.Get(connection.Spec.ConnectionType); known {
+	if descriptor, known := s.catalog.Get(connection.Spec.Contract); known {
 		entry.Icon = descriptor.Icon
 		entry.Category = descriptor.Category
 		// The catalog's display name wins over what the controller wrote in
@@ -429,10 +429,10 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 		entry.TypeDisplay = descriptor.DisplayName
 	}
 	if entry.TypeDisplay == "" {
-		entry.TypeDisplay = connection.Spec.ConnectionType
+		entry.TypeDisplay = connection.Spec.Contract
 	}
 
-	entry.Endpoint = endpointFrom(values, s.catalog, connection.Spec.ConnectionType)
+	entry.Endpoint = endpointFrom(values, s.catalog, connection.Spec.Contract)
 	// host and port stay filled when the contract has them, for the columns that
 	// show them separately. Most contracts publish a URI instead.
 	if host, ok := values["host"].(string); ok {
@@ -453,7 +453,7 @@ func (s *DefaultConnectionService) managedToInternal(connection *crd.Connection,
 // should be stored: derived fields filled, fields put out of play by the
 // submitted engine dropped. On an edit, credentials that were not resubmitted
 // are kept as they are rather than reported as missing.
-func (s *DefaultConnectionService) validateRequest(ctx context.Context, namespace string, req models.ConnectionRequest, isUpdate bool) (*models.ConnectionTypeDescriptor, map[string]any, error) {
+func (s *DefaultConnectionService) validateRequest(ctx context.Context, namespace string, req models.ConnectionRequest, isUpdate bool) (*models.ContractDescriptor, map[string]any, error) {
 	if !s.repo.Available(ctx) {
 		return nil, nil, ErrConnectionsUnavailable
 	}
@@ -463,7 +463,7 @@ func (s *DefaultConnectionService) validateRequest(ctx context.Context, namespac
 
 	descriptor, known := s.catalog.Get(req.Type)
 	if !known {
-		return nil, nil, invalid("unknown connection type %q", req.Type)
+		return nil, nil, invalid("unknown contract %q", req.Type)
 	}
 	if !descriptor.External {
 		return nil, nil, invalid("connections of type %q come from a deployed service and cannot be declared by hand", req.Type)
@@ -495,7 +495,7 @@ func (s *DefaultConnectionService) checkExistingSecret(
 	ctx context.Context,
 	namespace string,
 	req models.ConnectionRequest,
-	descriptor *models.ConnectionTypeDescriptor,
+	descriptor *models.ContractDescriptor,
 ) error {
 	secretNamespace := namespace
 	keys, found, err := s.repo.SecretKeys(ctx, secretNamespace, req.ExistingSecret)
@@ -528,7 +528,7 @@ func (s *DefaultConnectionService) checkExistingSecret(
 // credentials go to the platform namespace.
 // splitValues separates the values that go into the Connection spec from the
 // credentials, which are stored in a Secret instead.
-func splitValues(descriptor *models.ConnectionTypeDescriptor, values map[string]any) (map[string]any, map[string][]byte) {
+func splitValues(descriptor *models.ContractDescriptor, values map[string]any) (map[string]any, map[string][]byte) {
 	public := map[string]any{}
 	secrets := map[string][]byte{}
 
@@ -552,7 +552,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 	// One type, one contract. The label that used to carry the type separately
 	// is gone, and reading it would only resurrect the names of types that no
 	// longer exist.
-	connectionTypeName := connection.Spec.ConnectionType
+	contractName := connection.Spec.Contract
 
 	values := connection.Spec.Values
 	if values == nil {
@@ -561,7 +561,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 
 	response := models.ConnectionResponse{
 		Name:        connection.Name,
-		Type:        connectionTypeName,
+		Type:        contractName,
 		Scope:       models.ConnectionScopeProject,
 		Namespace:   namespace,
 		Description: connection.Spec.Description,
@@ -569,7 +569,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 		Message:     connection.Status.Message,
 		Values:      values,
 	}
-	if descriptor, known := s.catalog.Get(connectionTypeName); known {
+	if descriptor, known := s.catalog.Get(contractName); known {
 		response.SecretFields = descriptor.SecretFields()
 		// Read the Secret back from the annotation rather than rebuilding the
 		// name: a connection created before the convention, or edited by hand,
@@ -608,7 +608,7 @@ func IsNotFound(err error) bool {
 	return apierrors.IsNotFound(err)
 }
 
-func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, connectionType string) ([]models.SelectableConnection, error) {
+func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, contract string) ([]models.SelectableConnection, error) {
 	// Without the CRDs there is nothing to bind; the form simply offers no
 	// existing connection, which is accurate.
 	if !s.repo.Available(ctx) {
@@ -619,7 +619,7 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 	collect := func(connections []crd.Connection, scope string) {
 		for i := range connections {
 			connection := &connections[i]
-			if connectionType != "" && connection.Spec.ConnectionType != connectionType {
+			if contract != "" && connection.Spec.Contract != contract {
 				continue
 			}
 			if connection.Spec.Disabled {
@@ -628,7 +628,7 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 			result = append(result, models.SelectableConnection{
 				Name:        connection.Name,
 				Scope:       models.ConnectionScopeProject,
-				Type:        connection.Spec.ConnectionType,
+				Type:        connection.Spec.Contract,
 				Status:      connection.Status.Phase,
 				Description: connection.Spec.Description,
 				Managed:     connection.IsManaged(),
@@ -655,8 +655,8 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 // showed "not available yet" while its address sat in its own values, two
 // clicks away in the details panel. The descriptor now names the keys that
 // carry it, in order of preference.
-func endpointFrom(values map[string]any, catalog ConnectionTypeCatalog, connectionTypeName string) string {
-	if descriptor, known := catalog.Get(connectionTypeName); known {
+func endpointFrom(values map[string]any, catalog ContractCatalog, contractName string) string {
+	if descriptor, known := catalog.Get(contractName); known {
 		for _, key := range descriptor.EndpointFrom {
 			if value, ok := values[key].(string); ok && value != "" {
 				return value

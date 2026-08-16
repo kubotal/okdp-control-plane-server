@@ -97,9 +97,9 @@ func SetupRouter(cfg *config.Config, capabilitiesHandler *handlers.CapabilitiesH
 			externalSecrets.GET("/:esName/status", externalSecretHandler.GetExternalSecretStatus)
 		}
 
-		// Connection types available for creation, and whether the KuboCD
-		// connection CRDs are installed (external connections need them).
-		api.GET("/connection-types", connectionHandler.GetConnectionTypes)
+		// Contracts available for creation, and whether the KuboCD connection
+		// CRDs are installed (external connections need them).
+		api.GET("/contracts", connectionHandler.GetContracts)
 
 		// Connections (scoped per project namespace). "internal" lists what the
 		// project's deployed services expose; the rest are user-declared.

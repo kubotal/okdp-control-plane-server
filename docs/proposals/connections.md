@@ -21,9 +21,9 @@ external list at platform scope for connections shared by every project.
 
 > Sections 2 and 10 describe the state at the time this proposal was written, and are kept as the
 > context its decisions were taken in. Two things have moved since. The kinds `Interface` and
-> `ClusterInterface` are now named `ConnectionType` and `ClusterConnectionType`, and the whole
-> subsystem is heading for the KuboCD v0.3.2 release, where it ships as experimental. The decision
-> not to depend on a KuboCD branch still holds: the server probes the cluster and degrades cleanly.
+> `ClusterInterface` are now named `Contract` and `ClusterContract`, and the whole subsystem is
+> heading for the KuboCD v0.3.2 release, where it ships as experimental. The decision not to
+> depend on a KuboCD branch still holds: the server probes the cluster and degrades cleanly.
 
 - KuboCD models this already, on the **`feat/connection2` branch** (Serge's work): `Connection`,
   `ClusterConnection`, `Interface`, `ClusterInterface`. `ConnectionSpec.outputName` separates
@@ -46,14 +46,14 @@ external list at platform scope for connections shared by every project.
 | Where the connectivity test runs | Server pod, like `SecretStoreService.TestConnection` | Reuses the existing precedent; a Job in the project namespace costs RBAC, an image, cleanup and latency for a fidelity gain we do not need yet |
 | A test that only reaches the host | **Rejected** | The Vault precedent already refuses `sys/health`: a wrong password must fail the test |
 | Types in v1 | `postgresql`, `mysql`, `s3` declarable; `trino` discovered only | Covers the requested cases; the descriptor format makes a fourth type one file |
-| Where type descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `ConnectionType` schemas can be layered over them later without touching the API contract |
-| Credentials | Kubernetes Secret, referenced by annotation | Keeps `spec.values` exactly the shape a `ConnectionType` schema will validate, and reading a Connection never discloses a password |
+| Where type descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `Contract` schemas can be layered over them later without touching the API contract |
+| Credentials | Kubernetes Secret, referenced by annotation | Keeps `spec.values` exactly the shape a `Contract` schema will validate, and reading a Connection never discloses a password |
 | Scope | Project **and** platform-wide (admin) | Some connections are shared by every project |
 
 ## 4. API
 
 ```
-GET    /api/connection-types                          # descriptors + crdAvailable
+GET    /api/contracts                                 # descriptors + crdAvailable
 GET    /api/projects/{project}/connections            # external, unmanaged only
 POST   /api/projects/{project}/connections
 POST   /api/projects/{project}/connections/test       # never writes to the cluster
@@ -95,7 +95,7 @@ a negative answer for 30s so installing the CRDs takes effect without a restart.
 
 - reads return an empty list, never an error — an uninstalled optional CRD is the normal state;
 - writes return `ErrConnectionsUnavailable`, which the handler maps to **501**;
-- `GET /api/connection-types` reports `crdAvailable: false`, and the console explains the
+- `GET /api/contracts` reports `crdAvailable: false`, and the console explains the
   situation and disables creation instead of offering a form that cannot be saved;
 - internal connections are unaffected.
 
@@ -115,8 +115,8 @@ an edit: the test endpoint sees only what the form holds.
 ## 8. Out of scope (this proposal)
 
 - Wiring a connection into a service's deployment parameters. That is the point of the exercise,
-  but it belongs with the KuboCD packages once `ConnectionType`s exist for these types.
-- Declaring `ConnectionType` CRDs for `postgresql`, `mysql`, `s3`. Until a package ships them, a
+  but it belongs with the KuboCD packages once `Contract`s exist for these types.
+- Declaring `Contract` CRDs for `postgresql`, `mysql`, `s3`. Until a package ships them, a
   created Connection does not reconcile: the object is correct, the contract it references does
   not exist yet.
 - A tester for `trino` — it is discovered, not declared, so there is no form to validate.
@@ -124,7 +124,7 @@ an edit: the test endpoint sees only what the form holds.
 ## 9. RBAC
 
 Added to the server ClusterRole: `connections` and `clusterconnections` in full CRUD,
-`connectiontypes` and `clusterconnectiontypes` read-only (they are owned by the packages), and `services`
+`contracts` and `clustercontracts` read-only (they are owned by the packages), and `services`
 read-only for endpoint resolution. Rules on a CRD that is not installed are inert, so the chart
 applies unchanged on a cluster without them.
 

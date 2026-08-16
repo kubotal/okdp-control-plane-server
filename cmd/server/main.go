@@ -117,12 +117,12 @@ func main() {
 	// Setup router
 	// Initialize Connection stack (external connections declared by users +
 	// internal ones derived from the services deployed in a project)
-	connectionCatalog, err := service.NewEmbeddedConnectionTypeCatalog()
+	contractCatalog, err := service.NewEmbeddedContractCatalog()
 	if err != nil {
-		logrus.Fatalf("Failed to load the connection type catalog: %v", err)
+		logrus.Fatalf("Failed to load the contract catalog: %v", err)
 	}
 	connectionRepo := repository.NewConnectionRepository(k8sClient, k8sTypedClient, k8sDiscoveryClient)
-	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, connectionCatalog)
+	connectionService := service.NewDefaultConnectionService(connectionRepo, serviceRepo, contractCatalog)
 	connectionHandler := handlers.NewConnectionHandler(connectionService)
 
 	// The identity block is checked once, at startup, against what the cluster
