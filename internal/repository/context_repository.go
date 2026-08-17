@@ -77,25 +77,16 @@ type ContextRepository interface {
 //
 // The server reads from both. It consumes platform data, it does not own it.
 type k8sContextRepository struct {
-	client            dynamic.Interface
-	name              string
-	namespace         string
-	platformName      string
-	platformNamespace string
+	client    dynamic.Interface
+	name      string
+	namespace string
 }
 
-func NewContextRepository(client dynamic.Interface, name, namespace, platformName, platformNamespace string) ContextRepository {
-	// An empty platform name means both live in the same object, which is what
-	// a deployment that has not split them yet looks like.
-	if platformName == "" {
-		platformName, platformNamespace = name, namespace
-	}
+func NewContextRepository(client dynamic.Interface, name, namespace string) ContextRepository {
 	return &k8sContextRepository{
-		client:            client,
-		name:              name,
-		namespace:         namespace,
-		platformName:      platformName,
-		platformNamespace: platformNamespace,
+		client:    client,
+		name:      name,
+		namespace: namespace,
 	}
 }
 
@@ -105,7 +96,7 @@ func (r *k8sContextRepository) GetPlatformServices(ctx context.Context) ([]model
 		return nil, err
 	}
 
-	rawServices, found, err := unstructured.NestedSlice(u.Object, "spec", "context", "okdp", "services")
+	rawServices, found, err := unstructured.NestedSlice(u.Object, "spec", "context", "serviceCatalog", "services")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read okdp.services from Context: %w", err)
 	}
@@ -153,7 +144,7 @@ func (r *k8sContextRepository) GetPackageRepository(ctx context.Context) (string
 		return "", err
 	}
 
-	repo, _, _ := unstructured.NestedString(u.Object, "spec", "context", "okdp", "packageRepository")
+	repo, _, _ := unstructured.NestedString(u.Object, "spec", "context", "serviceCatalog", "defaultRepository")
 	if repo == "" {
 		return "", fmt.Errorf("okdp.packageRepository not found in Context %s/%s", r.namespace, r.name)
 	}
@@ -161,13 +152,13 @@ func (r *k8sContextRepository) GetPackageRepository(ctx context.Context) (string
 }
 
 func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, error) {
-	u, err := r.getPlatformContext(ctx)
+	u, err := r.getContext(ctx)
 	if err != nil {
 		return "", err
 	}
 	suffix, _, _ := unstructured.NestedString(u.Object, "spec", "context", "ingress", "suffix")
 	if suffix == "" {
-		return "", fmt.Errorf("ingress.suffix not found in Context %s/%s", r.platformNamespace, r.platformName)
+		return "", fmt.Errorf("ingress.suffix not found in Context %s/%s", r.namespace, r.name)
 	}
 	return suffix, nil
 }
@@ -177,19 +168,12 @@ func (r *k8sContextRepository) GetIngressSuffix(ctx context.Context) (string, er
 // Secrets: provisioning them ourselves would post CRs on a cluster that never
 // asked for them.
 func (r *k8sContextRepository) GetIdentity(ctx context.Context) (*models.PlatformIdentity, error) {
-	u, err := r.getPlatformContext(ctx)
+	u, err := r.getContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "clientProvisioning")
-	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "platform", "identity", "kubauthNamespace")
-	// Two older shapes, kept so Contexts written against them keep working.
-	if namespace == "" {
-		namespace, _, _ = unstructured.NestedString(u.Object, "spec", "context", "identity", "kubauth", "namespace")
-	}
-	if namespace == "" {
-		namespace, _, _ = unstructured.NestedString(u.Object, "spec", "context", "kubauth", "namespace")
-	}
+	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "clientProvisioning")
+	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "kubauthNamespace")
 
 	identity := &models.PlatformIdentity{
 		ClientProvisioning: provisioning,
@@ -288,7 +272,7 @@ func (r *k8sContextRepository) GetKeycloakProvisioningConfig(ctx context.Context
 }
 
 func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string][]models.ProfileImage, error) {
-	u, err := r.getPlatformContext(ctx)
+	u, err := r.getContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +305,7 @@ func (r *k8sContextRepository) GetProfileImages(ctx context.Context) (map[string
 }
 
 func (r *k8sContextRepository) GetSparkConfig(ctx context.Context) (*models.SparkConfig, error) {
-	u, err := r.getPlatformContext(ctx)
+	u, err := r.getContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +315,7 @@ func (r *k8sContextRepository) GetSparkConfig(ctx context.Context) (*models.Spar
 		return nil, fmt.Errorf("failed to read sparkOperator from Context: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("sparkOperator not found in Context %s/%s", r.platformNamespace, r.platformName)
+		return nil, fmt.Errorf("sparkOperator not found in Context %s/%s", r.namespace, r.name)
 	}
 
 	cfg := &models.SparkConfig{}
@@ -387,11 +371,6 @@ func (r *k8sContextRepository) getContext(ctx context.Context) (*unstructured.Un
 	return r.client.Resource(contextGVR).Namespace(r.namespace).Get(ctx, r.name, metav1.GetOptions{})
 }
 
-// getPlatformContext reads the platform Context, the one package templates also
-// read. Everything under spec.context.okdp stays out of it.
-func (r *k8sContextRepository) getPlatformContext(ctx context.Context) (*unstructured.Unstructured, error) {
-	return r.client.Resource(contextGVR).Namespace(r.platformNamespace).Get(ctx, r.platformName, metav1.GetOptions{})
-}
 
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {

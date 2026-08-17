@@ -71,7 +71,7 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	// Context repository (shared by capabilities, catalog and Spark)
-	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace, cfg.PlatformContextName, cfg.PlatformContextNamespace)
+	contextRepo := repository.NewContextRepository(k8sClient, cfg.ContextName, cfg.ContextNamespace)
 
 	// Initialize Capabilities stack (platform features derived from the Context)
 	capabilityService := service.NewDefaultCapabilityService(contextRepo)

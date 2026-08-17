@@ -11,28 +11,24 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
-// twoContexts builds the console and platform Contexts, both empty.
-func twoContexts(t *testing.T) *dynamicfake.FakeDynamicClient {
+// emptyPlatformContext builds the single platform Context, with no values.
+func emptyPlatformContext(t *testing.T) *dynamicfake.FakeDynamicClient {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	listKinds := map[schema.GroupVersionResource]string{contextGVR: "ContextList"}
 
-	empty := func(name string) *unstructured.Unstructured {
-		return &unstructured.Unstructured{Object: map[string]interface{}{
-			"apiVersion": "kubocd.kubotal.io/v1alpha1",
-			"kind":       "Context",
-			"metadata":   map[string]interface{}{"name": name, "namespace": "kubocd-system"},
-			"spec":       map[string]interface{}{"context": map[string]interface{}{}},
-		}}
-	}
+	platform := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "kubocd.kubotal.io/v1alpha1",
+		"kind":       "Context",
+		"metadata":   map[string]interface{}{"name": "platform", "namespace": "okdp-system"},
+		"spec":       map[string]interface{}{"context": map[string]interface{}{}},
+	}}
 
-	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds,
-		empty("okdp-control-plane"), empty("platform"))
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, platform)
 }
 
-func TestPlatformKeysNameThePlatformContext(t *testing.T) {
-	repo := NewContextRepository(twoContexts(t),
-		"okdp-control-plane", "kubocd-system", "platform", "kubocd-system")
+func TestMissingKeysNameTheContext(t *testing.T) {
+	repo := NewContextRepository(emptyPlatformContext(t), "platform", "okdp-system")
 
 	cases := []struct {
 		name string
@@ -54,22 +50,9 @@ func TestPlatformKeysNameThePlatformContext(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected an error naming the Context")
 			}
-			if !strings.Contains(err.Error(), "kubocd-system/platform") {
+			if !strings.Contains(err.Error(), "okdp-system/platform") {
 				t.Errorf("expected the platform Context to be named, got %q", err.Error())
 			}
 		})
-	}
-}
-
-func TestConsoleKeyNamesTheConsoleContext(t *testing.T) {
-	repo := NewContextRepository(twoContexts(t),
-		"okdp-control-plane", "kubocd-system", "platform", "kubocd-system")
-
-	_, err := repo.GetPackageRepository(context.Background())
-	if err == nil {
-		t.Fatal("expected an error naming the Context")
-	}
-	if !strings.Contains(err.Error(), "kubocd-system/okdp-control-plane") {
-		t.Errorf("expected the console Context to be named, got %q", err.Error())
 	}
 }
