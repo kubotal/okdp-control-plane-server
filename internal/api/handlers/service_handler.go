@@ -280,8 +280,6 @@ func (h *ServiceHandler) StreamServices(c *gin.Context) {
 	}
 	defer watcher.Stop()
 
-	ingressSuffix, _ := h.service.GetIngressSuffix(c.Request.Context())
-
 	c.Writer.Flush()
 
 	for {
@@ -300,10 +298,7 @@ func (h *ServiceHandler) StreamServices(c *gin.Context) {
 				continue
 			}
 
-			if ingressSuffix != "" && instance.ReleaseName != "" {
-				instance.URL = fmt.Sprintf("https://%s.%s", instance.ReleaseName, ingressSuffix)
-			}
-
+			h.service.EnrichURL(c.Request.Context(), &instance)
 			h.service.EnrichPodHealth(c.Request.Context(), &instance)
 
 			c.SSEvent("message", gin.H{"type": event.Type, "object": instance})
