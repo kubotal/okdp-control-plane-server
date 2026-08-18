@@ -39,9 +39,16 @@ func TestKubauthWithItsNamespaceIsValid(t *testing.T) {
 	}
 }
 
-// An unknown mode is a typo, not a third behaviour to guess at.
+func TestDcrIsValid(t *testing.T) {
+	identity := &PlatformIdentity{ClientProvisioning: ClientProvisioningDcr}
+	if err := identity.Validate(); err != nil {
+		t.Fatalf("expected dcr to be valid, got %v", err)
+	}
+}
+
+// An unknown mode is a typo, not a fourth behaviour to guess at.
 func TestUnknownModeIsRejected(t *testing.T) {
-	for _, mode := range []string{"", "dcr", "Existing", "kubauth-"} {
+	for _, mode := range []string{"", "Existing", "kubauth-", "none"} {
 		identity := &PlatformIdentity{ClientProvisioning: mode}
 		if err := identity.Validate(); err == nil {
 			t.Errorf("expected %q to be rejected", mode)

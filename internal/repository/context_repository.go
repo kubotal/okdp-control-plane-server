@@ -172,8 +172,15 @@ func (r *k8sContextRepository) GetIdentity(ctx context.Context) (*models.Platfor
 	if err != nil {
 		return nil, err
 	}
-	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "clientProvisioning")
-	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "identity", "kubauthNamespace")
+	provisioning, _, _ := unstructured.NestedString(u.Object, "spec", "context", "oidc", "clientProvisioning")
+	if provisioning == "" {
+		// Legacy path, kept while Contexts migrate to the single oidc block.
+		provisioning, _, _ = unstructured.NestedString(u.Object, "spec", "context", "identity", "clientProvisioning")
+	}
+	namespace, _, _ := unstructured.NestedString(u.Object, "spec", "context", "oidc", "kubauth", "namespace")
+	if namespace == "" {
+		namespace, _, _ = unstructured.NestedString(u.Object, "spec", "context", "identity", "kubauthNamespace")
+	}
 
 	identity := &models.PlatformIdentity{
 		ClientProvisioning: provisioning,

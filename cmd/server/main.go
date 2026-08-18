@@ -167,15 +167,15 @@ func checkIdentityConfiguration(ctx context.Context, contextRepo repository.Cont
 		// stopping for; the two are told apart by the error the repository
 		// returns, which only validates what it found.
 		if identity != nil {
-			logrus.Fatalf("Invalid platform.identity: %v", err)
+			logrus.Fatalf("Invalid oidc client-provisioning configuration: %v", err)
 		}
-		logrus.WithError(err).Warn("Could not read platform.identity, assuming clients are provisioned elsewhere")
+		logrus.WithError(err).Warn("Could not read oidc.clientProvisioning, assuming clients are provisioned elsewhere")
 		return
 	}
 
 	if identity.ProvisionsWithKubauth() && !identityRepo.Available(ctx) {
 		logrus.Fatalf(
-			"platform.identity.clientProvisioning is %q but the kubauth CRDs are not installed on this cluster. "+
+			"oidc.clientProvisioning is %q but the kubauth CRDs are not installed on this cluster. "+
 				"Install kubauth, or set it to %q if another mechanism makes the OAuth client Secrets.",
 			models.ClientProvisioningKubauth, models.ClientProvisioningExisting)
 	}

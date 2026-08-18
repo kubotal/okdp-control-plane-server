@@ -9,9 +9,11 @@ const (
 	ClientProvisioningExisting = "existing"
 	// The package generates it and posts its own OidcClient CR.
 	ClientProvisioningKubauth = "kubauth"
+	// The package registers its client against the provider at deploy time.
+	ClientProvisioningDcr = "dcr"
 )
 
-// PlatformIdentity is the platform.identity block, written rather than inferred
+// PlatformIdentity is the oidc client-provisioning block, written rather than inferred
 // from the CRDs present: "kubauth is installed" is not "kubauth provisions our
 // clients".
 type PlatformIdentity struct {
@@ -24,16 +26,16 @@ type PlatformIdentity struct {
 // a user first tries to log in.
 func (i *PlatformIdentity) Validate() error {
 	switch i.ClientProvisioning {
-	case ClientProvisioningExisting:
+	case ClientProvisioningExisting, ClientProvisioningDcr:
 		return nil
 	case ClientProvisioningKubauth:
 		if i.KubauthNamespace == "" {
-			return fmt.Errorf("platform.identity.kubauthNamespace is required when clientProvisioning is %q", ClientProvisioningKubauth)
+			return fmt.Errorf("oidc.kubauth.namespace is required when clientProvisioning is %q", ClientProvisioningKubauth)
 		}
 		return nil
 	default:
-		return fmt.Errorf("platform.identity.clientProvisioning must be %q or %q, got %q",
-			ClientProvisioningExisting, ClientProvisioningKubauth, i.ClientProvisioning)
+		return fmt.Errorf("oidc.clientProvisioning must be %q, %q or %q, got %q",
+			ClientProvisioningExisting, ClientProvisioningKubauth, ClientProvisioningDcr, i.ClientProvisioning)
 	}
 }
 
