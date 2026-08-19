@@ -279,3 +279,23 @@ func TestEveryPlatformContractIsInTheCatalog(t *testing.T) {
 		assert.True(t, ct.External, "%s must offer a creation form", name)
 	}
 }
+
+// The consumers and the connectivity test read the values, not the descriptor,
+// so an omitted optional field must carry its declared default.
+func TestNormalizeWritesTheDeclaredDefaults(t *testing.T) {
+	catalog, err := NewEmbeddedContractCatalog()
+	if err != nil {
+		t.Fatalf("loading the catalog: %v", err)
+	}
+
+	values := catalog.Normalize("database-server", map[string]any{
+		"engine": "postgresql",
+		"host":   "db.example.com",
+		"port":   float64(5432),
+		"dbName": "analytics",
+	})
+
+	if values["sslMode"] != "prefer" {
+		t.Fatalf("sslMode: got %v, want the declared default \"prefer\"", values["sslMode"])
+	}
+}

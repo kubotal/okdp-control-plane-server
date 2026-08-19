@@ -161,12 +161,19 @@ func (c *embeddedCatalog) Normalize(typeName string, values map[string]any) map[
 			delete(out, f.Name)
 			continue
 		}
-		if f.Derived == nil {
+		if f.Derived != nil {
+			source, _ := out[f.Derived.From].(string)
+			if derived, known := f.Derived.Map[source]; known {
+				out[f.Name] = derived
+			}
 			continue
 		}
-		source, _ := out[f.Derived.From].(string)
-		if derived, known := f.Derived.Map[source]; known {
-			out[f.Name] = derived
+		// An omitted field means the contract's default, and it belongs in the
+		// values: the connectivity test and the consumers read those, not the
+		// descriptor, so an absent sslMode would be probed as the strictest mode
+		// rather than the declared one.
+		if _, present := out[f.Name]; !present && f.Default != nil && !f.Secret {
+			out[f.Name] = f.Default
 		}
 	}
 	return out
