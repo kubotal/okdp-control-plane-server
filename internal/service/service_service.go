@@ -485,8 +485,16 @@ func ownsByName(objectName, releaseName string, otherReleases []string) bool {
 		return false
 	}
 	for _, other := range otherReleases {
+		if len(other) <= len(releaseName) {
+			continue
+		}
+		// The neighbour's own name is one of its objects too: a chart names its
+		// PVC after the release itself.
+		if objectName == other {
+			return false
+		}
 		otherPrefix := other + "-"
-		if len(other) > len(releaseName) && len(objectName) > len(otherPrefix) && objectName[:len(otherPrefix)] == otherPrefix {
+		if len(objectName) > len(otherPrefix) && objectName[:len(otherPrefix)] == otherPrefix {
 			return false
 		}
 	}

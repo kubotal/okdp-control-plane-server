@@ -22,6 +22,11 @@ func TestOwnsByNameSparesTheNeighboursObjects(t *testing.T) {
 		"a home volume of the jupyter-ds instance must survive deleting jupyter")
 	assert.False(t, ownsByName("demo-jupyter-ds-alice", "demo-jupyter", others))
 
+	// An object carrying the neighbour's own name, as a chart naming its volume
+	// after the release does.
+	assert.False(t, ownsByName("demo-jupyter-ds", "demo-jupyter", others),
+		"an object named exactly like the jupyter-ds release belongs to it")
+
 	// The objects of the instance actually being deleted.
 	assert.True(t, ownsByName("demo-jupyter-claim-bob", "demo-jupyter", others))
 	assert.True(t, ownsByName("demo-jupyter-bob", "demo-jupyter", others))
