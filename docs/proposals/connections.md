@@ -46,8 +46,8 @@ external list at platform scope for connections shared by every project.
 | Depend on `feat/connection2`? | **No.** Probe the cluster, degrade cleanly | The feature ships and merges on its own schedule; it activates when the CRDs land, with no code change |
 | Where the connectivity test runs | Server pod, like `SecretStoreService.TestConnection` | Reuses the existing precedent; a Job in the project namespace costs RBAC, an image, cleanup and latency for a fidelity gain we do not need yet |
 | A test that only reaches the host | **Rejected** | The Vault precedent already refuses `sys/health`: a wrong password must fail the test |
-| Types in v1 | `postgresql`, `mysql`, `s3` declarable; `trino` discovered only | Covers the requested cases; the descriptor format makes a fourth type one file |
-| Where type descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `Contract` schemas can be layered over them later without touching the API contract |
+| Contracts in v1 | `database-server`, `s3`, `trino`, `hive`, `iceberg-catalog` | Covers the requested cases, and the descriptor format makes a sixth contract one file |
+| Where contract descriptors live | JSON embedded in the server, served by API | One descriptor drives the console form, server validation and provider matching. Cluster `Contract` schemas can be layered over them later without touching the API contract |
 | Credentials | Kubernetes Secret, referenced by annotation | Keeps `spec.values` exactly the shape a `Contract` schema will validate, and reading a Connection never discloses a password |
 | Scope | Project **and** platform-wide (admin) | Some connections are shared by every project |
 
@@ -115,7 +115,8 @@ an edit: the test endpoint sees only what the form holds.
 - Declaring `Contract` CRDs for `postgresql`, `mysql`, `s3`. Until a package ships them, a
   created Connection does not reconcile: the object is correct, the contract it references does
   not exist yet.
-- A tester for `trino` — it is discovered, not declared, so there is no form to validate.
+- Connectivity testers beyond `database-server` and `s3`. The other contracts answer that they
+  cannot be tested, and their form saves without a probe.
 
 ## 9. RBAC
 

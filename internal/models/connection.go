@@ -89,9 +89,10 @@ type ContractDescriptor struct {
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 	Category    string `json:"category"`
-	// External reports whether a user may declare a connection of this type by
-	// hand. Types that only ever come from a service deployed on the platform
-	// (Trino, ...) are listed for the internal view but offer no creation form.
+	// External reports whether a user may declare a connection against this
+	// contract by hand. A contract that is not external is listed for the
+	// internal view, where the connections come from the deployed services,
+	// but offers no creation form.
 	External bool              `json:"external"`
 	Fields   []ConnectionField `json:"fields"`
 	// EndpointFrom names the value fields carrying the address a consumer would
