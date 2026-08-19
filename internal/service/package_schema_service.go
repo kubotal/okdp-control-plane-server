@@ -131,11 +131,11 @@ func (s *DefaultPackageSchemaService) listOCITags(packageRepo, serviceName strin
 	if insecureOCIHost(packageRepo, s.insecureRegistries) {
 		scheme = "http"
 	}
-	registryURL := fmt.Sprintf("%s://%s/v2/%s/tags/list",
-		scheme,
-		strings.SplitN(packageRepo, "/", 2)[0],
-		strings.SplitN(packageRepo, "/", 2)[1]+"/"+serviceName,
-	)
+	host, path, found := strings.Cut(packageRepo, "/")
+	if !found || path == "" {
+		return nil, fmt.Errorf("package repository %q carries no path, it must be like registry/namespace", packageRepo)
+	}
+	registryURL := fmt.Sprintf("%s://%s/v2/%s/tags/list", scheme, host, path+"/"+serviceName)
 
 	resp, err := registryGet(registryURL)
 	if err != nil {
