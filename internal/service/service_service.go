@@ -463,7 +463,9 @@ func (s *DefaultServiceService) DeleteService(ctx context.Context, project, name
 // identity.provisioning.provider is unset/none).
 func (s *DefaultServiceService) cleanupOidcClient(ctx context.Context, releaseName string) {
 	if err := s.oidcProvisioner.DeleteClient(ctx, releaseName); err != nil {
-		logrus.WithError(err).WithField("oidcClient", releaseName).Debug("OidcClient cleanup skipped")
+		// Warn, not Debug: a client left registered outlives the service that
+		// owned it and nothing else reports it.
+		logrus.WithError(err).WithField("oidcClient", releaseName).Warn("OidcClient cleanup failed")
 	} else {
 		logrus.WithField("oidcClient", releaseName).Info("Cleaned up OidcClient")
 	}
