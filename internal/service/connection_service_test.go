@@ -751,3 +751,31 @@ func TestCreateOnATakenNameLeavesTheCredentialsAlone(t *testing.T) {
 	connectionRepo.AssertNotCalled(t, "DeleteSecret", mock.Anything, mock.Anything, mock.Anything)
 	connectionRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything)
 }
+
+// The Secret name is published in spec.values for the consumers, so a client
+// that edits what it read sends it back. It must not be rejected as an unknown
+// field, and it must survive the edit.
+func TestUpdateAcceptsTheValuesItReturned(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	existing := &crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
+		Spec: crd.ConnectionSpec{
+			Contract: "database-server",
+			Values:   map[string]any{"secretRef": "warehouse-credentials"},
+		},
+	}
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
+	connectionRepo.On("Update", mock.Anything, "demo", mock.Anything).Return(nil)
+
+	req := postgresRequest()
+	delete(req.Values, "password")
+	delete(req.Values, "username")
+	req.Values["secretRef"] = "warehouse-credentials" // as read from the API
+	req.Values["port"] = float64(5433)
+
+	response, err := svc.Update(context.Background(), "demo", "warehouse", req)
+	require.NoError(t, err)
+	assert.Equal(t, "warehouse-credentials", existing.Spec.Values["secretRef"])
+	assert.Equal(t, float64(5433), response.Values["port"])
+}

@@ -479,6 +479,10 @@ func (s *DefaultConnectionService) validateRequest(ctx context.Context, namespac
 		return nil, nil, invalid("connections of type %q come from a deployed service and cannot be declared by hand", req.Type)
 	}
 	values := s.catalog.Normalize(req.Type, req.Values)
+	// The Secret name is published in spec.values for the consumers, so a client
+	// editing what it just read sends it back. No contract declares it, and the
+	// write paths below set it again from the request.
+	delete(values, valueSecretRef)
 	validateValues := s.catalog.Validate
 	if isUpdate {
 		validateValues = s.catalog.ValidateUpdate
