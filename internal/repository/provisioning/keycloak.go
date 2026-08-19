@@ -144,7 +144,11 @@ func (p *keycloakProvisioner) connect(ctx context.Context) (*KeycloakConfig, *ke
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	if cfg.InsecureSkipTLSVerify {
-		httpClient.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		// Cloned, not built from scratch: a bare Transport has no Proxy, and the
+		// chart passes the egress proxy the pod must go through.
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		httpClient.Transport = transport
 	}
 
 	// A fresh token per operation keeps the adapter stateless; client cleanup is
