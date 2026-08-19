@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/okdp/okdp-control-plane-server/internal/models"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 // RequireProject checks that the :name segment of the path really is a project,
@@ -28,7 +29,15 @@ func RequireProject(get func(c *gin.Context, name string) (*models.Project, erro
 		}
 
 		project, err := get(c, name)
-		if err != nil || project == nil {
+		switch {
+		case err != nil && !apierrors.IsNotFound(err):
+			// A cluster that cannot answer is not a project that does not exist:
+			// answering 404 on a timeout tells the console the project was
+			// deleted, and loses the cause on the way.
+			_ = c.Error(err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not resolve project '" + name + "'"})
+			return
+		case err != nil || project == nil:
 			// Deliberately the same answer whether the namespace is absent or
 			// simply not a project: the caller learns nothing about what exists
 			// outside the projects.
