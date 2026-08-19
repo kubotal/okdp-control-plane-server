@@ -643,9 +643,6 @@ func (s *DefaultConnectionService) ListSelectable(ctx context.Context, project, 
 			if contract != "" && connection.Spec.Contract != contract {
 				continue
 			}
-			if connection.Spec.Disabled {
-				continue
-			}
 			result = append(result, models.SelectableConnection{
 				Name:        connection.Name,
 				Scope:       models.ConnectionScopeProject,

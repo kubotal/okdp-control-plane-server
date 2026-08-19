@@ -5,10 +5,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// KuboCD connections. The CRDs are not part of the KuboCD release the platform
-// currently runs, so every access goes through ConnectionRepository.Available()
-// and degrades to an empty result instead of an error. The shapes below mirror
-// the upstream definitions so that nothing has to change once they ship.
+// KuboCD connections. The CRDs ship with kubocd v0.3.2 as an experimental
+// feature, so a platform may run without them: every access goes through
+// ConnectionRepository.Available() and degrades to an empty result instead of
+// an error. The shapes below mirror the upstream v0.3.2 definitions.
 const (
 	ConnectionAPIVersion  = "kubocd.kubotal.io/v1alpha1"
 	ConnectionKind        = "Connection"
@@ -59,7 +59,6 @@ type ConnectionSpec struct {
 	// manages, and is empty on the ones a user declared. It is what separates
 	// the internal connections of a project from the external ones.
 	OutputName  string `json:"outputName,omitempty"`
-	Disabled    bool   `json:"disabled,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
