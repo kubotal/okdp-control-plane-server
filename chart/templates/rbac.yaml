@@ -18,7 +18,10 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "create", "update", "delete"]
   - apiGroups: [""]
-    resources: ["pods", "pods/log"]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
     verbs: ["get", "list"]
   # Read by the code but granted nowhere until now. Their failures are logged at
   # Debug, so in a cluster the feature simply vanished: no reason shown for a
