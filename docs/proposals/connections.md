@@ -20,9 +20,10 @@ external list at platform scope for connections shared by every project.
 ## 2. Current state
 
 > Sections 2 and 10 describe the state at the time this proposal was written, and are kept as the
-> context its decisions were taken in. Two things have moved since. The kinds `Interface` and
-> `ClusterInterface` are now named `Contract` and `ClusterContract`, and the whole subsystem is
-> heading for the KuboCD v0.3.2 release, where it ships as experimental. The decision not to
+> context its decisions were taken in. Three things have moved since. The kinds `Interface` and
+> `ClusterInterface` are now named `Contract` and `ClusterContract`, the subsystem shipped as
+> experimental with the KuboCD v0.3.2 release, and the platform-wide connection scope was dropped
+> (connections are project-scoped only, nothing consumed the cluster scope). The decision not to
 > depend on a KuboCD branch still holds: the server probes the cluster and degrades cleanly.
 
 - KuboCD models this already, on the **`feat/connection2` branch** (Serge's work): `Connection`,
@@ -60,13 +61,9 @@ POST   /api/projects/{project}/connections/test       # never writes to the clus
 PUT    /api/projects/{project}/connections/{name}
 DELETE /api/projects/{project}/connections/{name}
 GET    /api/projects/{project}/connections/internal   # derived from deployed services
-GET|POST|PUT|DELETE /api/platform-connections[/{name}]    # admin, cluster-scoped
-POST   /api/platform-connections/test
+GET    /api/projects/{project}/connections/selectable  # satisfying a contract, for the deploy picker
+GET    /api/projects/{project}/connections/{name}/consumers
 ```
-
-An empty namespace addresses the cluster-scoped `ClusterConnection` throughout the repository and
-service layers, mirroring how KuboCD treats the two as shapes of the same thing — the
-project-scoped and platform-wide paths are one code path.
 
 `POST .../test` always answers **200**: a refused connection is a result to display, not a failed
 request. The body carries `success`, a human-readable `message` and a `reason`
@@ -102,8 +99,7 @@ a negative answer for 30s so installing the CRDs takes effect without a restart.
 ## 7. Credentials
 
 `splitValues` separates the fields the descriptor marks `secret` from the rest. The secrets go to
-`<name>-credentials` in the project namespace (the platform namespace for cluster-scoped
-connections, which have none of their own); the rest becomes `spec.values`. The Connection carries
+`<name>-credentials` in the project namespace, the rest becomes `spec.values`. The Connection carries
 `okdp.io/credentials-secret: <namespace>/<name>` and never the values themselves. Read paths
 return only the **names** of the secret fields, so the console can show a credential as set
 without being able to read it.
