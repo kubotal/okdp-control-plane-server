@@ -159,6 +159,16 @@ func (s *DefaultConnectionService) Create(ctx context.Context, namespace string,
 		return nil, err
 	}
 
+	// The name has to be free before anything is written: the credentials Secret
+	// of a live connection follows the same naming convention, so writing it
+	// first would let a repeated create merge into it and the rollback below
+	// delete it, taking the running consumers' credentials with it.
+	if _, err := s.repo.Get(ctx, namespace, req.Name); err == nil {
+		return nil, apierrors.NewAlreadyExists(crd.GetConnectionGVR().GroupResource(), req.Name)
+	} else if !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
 	public, secrets := splitValues(descriptor, values)
 	secretNamespace := namespace
 	secretName := req.Name + credentialsSecretSuffix

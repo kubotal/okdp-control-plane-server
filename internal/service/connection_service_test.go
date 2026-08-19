@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/okdp/okdp-control-plane-server/internal/models"
@@ -86,6 +87,7 @@ func TestCreateStoresCredentialsInASecretAndNotInTheSpec(t *testing.T) {
 
 	var stored *crd.Connection
 	connectionRepo.On("CreateOrUpdateSecret", mock.Anything, "demo", "warehouse-credentials", mock.Anything).Return(nil)
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return((*crd.Connection)(nil), apierrors.NewNotFound(crd.GetConnectionGVR().GroupResource(), "warehouse"))
 	connectionRepo.On("Create", mock.Anything, "demo", mock.Anything).Run(func(args mock.Arguments) {
 		stored = args.Get(2).(*crd.Connection)
 	}).Return(nil)
@@ -118,6 +120,7 @@ func TestCreateRemovesTheSecretWhenTheConnectionIsRejected(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
 	connectionRepo.On("CreateOrUpdateSecret", mock.Anything, "demo", "warehouse-credentials", mock.Anything).Return(nil)
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return((*crd.Connection)(nil), apierrors.NewNotFound(crd.GetConnectionGVR().GroupResource(), "warehouse"))
 	connectionRepo.On("Create", mock.Anything, "demo", mock.Anything).Return(assert.AnError)
 	connectionRepo.On("DeleteSecret", mock.Anything, "demo", "warehouse-credentials").Return(nil)
 
@@ -488,6 +491,7 @@ func TestCreateCanPointAtAnExistingSecret(t *testing.T) {
 
 	connectionRepo.On("SecretKeys", mock.Anything, "demo", "warehouse-from-vault").
 		Return([]string{"password", "username"}, true, nil)
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return((*crd.Connection)(nil), apierrors.NewNotFound(crd.GetConnectionGVR().GroupResource(), "warehouse"))
 	connectionRepo.On("Create", mock.Anything, "demo", mock.Anything).Return(nil)
 
 	req := postgresRequest()
@@ -726,4 +730,24 @@ func TestDeleteRemovesTheSecretItWrote(t *testing.T) {
 	require.NoError(t, svc.Delete(context.Background(), "demo", "warehouse"))
 
 	connectionRepo.AssertCalled(t, "DeleteSecret", mock.Anything, "demo", "warehouse-credentials")
+}
+
+// A repeated create must not touch the credentials Secret of the connection
+// that already holds the name: merging into it and then rolling it back would
+// take the running consumers' credentials with it.
+func TestCreateOnATakenNameLeavesTheCredentialsAlone(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(&crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{Name: "warehouse", Namespace: "demo"},
+		Spec:       crd.ConnectionSpec{Contract: "database-server"},
+	}, nil)
+
+	_, err := svc.Create(context.Background(), "demo", postgresRequest())
+	require.Error(t, err)
+	require.True(t, apierrors.IsAlreadyExists(err))
+
+	connectionRepo.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	connectionRepo.AssertNotCalled(t, "DeleteSecret", mock.Anything, mock.Anything, mock.Anything)
+	connectionRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything)
 }
