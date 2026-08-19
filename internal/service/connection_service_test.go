@@ -779,3 +779,41 @@ func TestUpdateAcceptsTheValuesItReturned(t *testing.T) {
 	assert.Equal(t, "warehouse-credentials", existing.Spec.Values["secretRef"])
 	assert.Equal(t, float64(5433), response.Values["port"])
 }
+
+// Pointing a connection at a Secret somebody else owns leaves the one the
+// console wrote unreferenced: nothing would ever remove it, since deleting the
+// connection now reads it as not ours.
+func TestUpdateToAnExistingSecretRemovesTheOneItOwned(t *testing.T) {
+	svc, connectionRepo, _ := newServiceUnderTest(t, true)
+
+	existing := &crd.Connection{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "warehouse",
+			Namespace: "demo",
+			Annotations: map[string]string{
+				AnnotationCredentialsSecret: "demo/warehouse-credentials",
+				AnnotationCredentialsOwned:  "true",
+			},
+		},
+		Spec: crd.ConnectionSpec{
+			Contract: "database-server",
+			Values:   map[string]any{"secretRef": "warehouse-credentials"},
+		},
+	}
+	connectionRepo.On("Get", mock.Anything, "demo", "warehouse").Return(existing, nil)
+	connectionRepo.On("Update", mock.Anything, "demo", mock.Anything).Return(nil)
+	connectionRepo.On("SecretKeys", mock.Anything, "demo", "warehouse-from-vault").
+		Return([]string{"password", "username"}, true, nil)
+	connectionRepo.On("DeleteSecret", mock.Anything, "demo", "warehouse-credentials").Return(nil)
+
+	req := postgresRequest()
+	req.ExistingSecret = "warehouse-from-vault"
+	delete(req.Values, "password")
+	delete(req.Values, "username")
+
+	_, err := svc.Update(context.Background(), "demo", "warehouse", req)
+	require.NoError(t, err)
+
+	connectionRepo.AssertCalled(t, "DeleteSecret", mock.Anything, "demo", "warehouse-credentials")
+	assert.Equal(t, "warehouse-from-vault", existing.Spec.Values["secretRef"])
+}

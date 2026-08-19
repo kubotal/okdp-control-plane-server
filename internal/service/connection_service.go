@@ -246,7 +246,14 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 	secretName := name + credentialsSecretSuffix
 
 	if req.ExistingSecret != "" {
-		// Switched to, or kept on, a Secret owned elsewhere.
+		// Switched to, or kept on, a Secret owned elsewhere. A Secret we owned
+		// until now has no other reference left, and the delete path will read
+		// the connection as unowned, so it goes here or it never goes.
+		if previous, owned := credentialsSecretOf(existing, name); owned && previous != req.ExistingSecret {
+			if err := s.repo.DeleteSecret(ctx, secretNamespace, previous); err != nil {
+				logrus.WithError(err).WithField("secret", previous).Warn("Failed to remove the credentials secret left behind by a connection now pointing elsewhere")
+			}
+		}
 		public[valueSecretRef] = req.ExistingSecret
 		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+req.ExistingSecret, false)
 	} else if len(secrets) > 0 {
