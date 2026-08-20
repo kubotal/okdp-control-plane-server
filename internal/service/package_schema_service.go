@@ -20,6 +20,7 @@ import (
 	"github.com/okdp/okdp-control-plane-server/internal/models"
 	"github.com/okdp/okdp-control-plane-server/internal/repository"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/singleflight"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,6 +46,7 @@ type DefaultPackageSchemaService struct {
 	contextRepo        repository.ContextRepository
 	cache              sync.Map
 	tagsCache          sync.Map
+	inflight           singleflight.Group
 	cacheTTL           time.Duration
 	insecureRegistries []string
 }
@@ -390,6 +392,23 @@ func (s *DefaultPackageSchemaService) GetPackageInputs(ctx context.Context, serv
 // parameter schema and the inputs.
 func (s *DefaultPackageSchemaService) load(serviceName, tag, packageRepo string) (*schemaCacheEntry, error) {
 	cacheKey := fmt.Sprintf("%s:%s", serviceName, tag)
+	if cached, ok := s.cache.Load(cacheKey); ok {
+		ce := cached.(*schemaCacheEntry)
+		if time.Since(ce.fetchedAt) < s.cacheTTL {
+			return ce, nil
+		}
+	}
+
+	shared, err, _ := s.inflight.Do(cacheKey, func() (any, error) {
+		return s.fetchAndCache(serviceName, tag, packageRepo, cacheKey)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return shared.(*schemaCacheEntry), nil
+}
+
+func (s *DefaultPackageSchemaService) fetchAndCache(serviceName, tag, packageRepo, cacheKey string) (*schemaCacheEntry, error) {
 	if cached, ok := s.cache.Load(cacheKey); ok {
 		ce := cached.(*schemaCacheEntry)
 		if time.Since(ce.fetchedAt) < s.cacheTTL {
