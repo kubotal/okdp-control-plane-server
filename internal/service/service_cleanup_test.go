@@ -8,12 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Deleting a service used to delete every pod and volume whose name started
-// with the release name, which is also the start of the names of any release
-// whose name extends it. Deleting `jupyter` in a project that also runs
-// `jupyter-ds` therefore destroyed the home volumes of the other instance's
-// users, silently, and the confirmation dialog only mentioned the service being
-// deleted.
+// A release name is also the start of the name of any release extending it, so
+// deleting `jupyter` in a project that also runs `jupyter-ds` must leave the
+// home volumes of the other instance's users alone.
 func TestOwnsByNameSparesTheNeighboursObjects(t *testing.T) {
 	others := []string{"demo-jupyter-ds", "demo-trino"}
 

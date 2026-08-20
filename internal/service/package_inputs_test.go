@@ -45,7 +45,7 @@ inputs:
 
 func TestInputsOfToleratesAPackageWithout(t *testing.T) {
 	if got := inputsOf(map[string]any{"schema": map[string]any{}}); got != nil {
-		t.Errorf("got %v, want nil — no inputs is the normal case", got)
+		t.Errorf("got %v, want nil, no inputs is the normal case", got)
 	}
 }
 

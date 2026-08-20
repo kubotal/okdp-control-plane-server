@@ -20,7 +20,7 @@ type Config struct {
 	ReleaseInterval        string
 	ReleaseTimeout         string
 	ExcludedSidecarPrefixes []string
-	// InsecureOCIRegistries lists registry hosts reached over plain HTTP —
+	// InsecureOCIRegistries lists registry hosts reached over plain HTTP 
 	// a development-sandbox affordance for local registries without TLS.
 	InsecureOCIRegistries []string
 }

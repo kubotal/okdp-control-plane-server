@@ -22,7 +22,7 @@ func TestListSelectableOffersTheProjectConnectionsOfTheContract(t *testing.T) {
 			Status:     crd.ConnectionStatus{Phase: "READY"},
 		},
 		{
-			// Managed by a release: still selectable — that is the whole point
+			// Managed by a release: still selectable, which is the whole point
 			// of a published connection.
 			ObjectMeta: metav1.ObjectMeta{Name: "demo-trino-endpoint", Namespace: "demo"},
 			Spec:       crd.ConnectionSpec{Contract: "trino", OutputName: "endpoint"},

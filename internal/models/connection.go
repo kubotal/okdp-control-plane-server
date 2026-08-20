@@ -180,7 +180,8 @@ type ConnectionTestCheck struct {
 }
 
 // CredentialsSecretRef is the Secret holding a connection's credentials, with
-// the keys it carries. It names no single key — a connection may hold several.
+// the keys it carries. It names no single key because a connection may hold
+// several.
 type CredentialsSecretRef struct {
 	Name      string   `json:"name"`
 	Namespace string   `json:"namespace,omitempty"`
@@ -261,7 +262,7 @@ type PackageInput struct {
 }
 
 // SelectableConnection is a connection offered when deploying a service whose
-// package declares an input — just what the picker needs to render a choice.
+// package declares an input, just what the picker needs to render a choice.
 // Managed connections are included: a Trino published by another release is
 // exactly the kind of thing a new service wants to bind.
 type SelectableConnection struct {

@@ -251,7 +251,8 @@ func TestManagedConnectionsAreNotEditable(t *testing.T) {
 }
 
 // The controller fills status.parent only once it has reconciled, so a managed
-// connection can legitimately have none — the refusal must still read sensibly.
+// connection can legitimately have none, so the refusal must still read
+// sensibly.
 func TestManagedConnectionWithoutAParentIsStillRefused(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 
@@ -293,11 +294,9 @@ func TestListExcludesManagedConnections(t *testing.T) {
 
 // --- Internal connections ---
 
-// The tab lists what the project's services actually publish, and only that.
-// It used to add entries the server fabricated by matching a release label
-// against a hardcoded list and guessing an address from the Kubernetes Service
-// whose name looked closest. Nothing could bind those entries, since the picker
-// only offers real Connections, yet they looked exactly like the real ones.
+// The tab lists what the project's services actually publish, and only that:
+// the picker offers Connections, so an entry without one behind it could not be
+// bound while looking exactly like the ones that can.
 func TestListInternalOnlyListsPublishedConnections(t *testing.T) {
 	svc, connectionRepo, _ := newServiceUnderTest(t, true)
 

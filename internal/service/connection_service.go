@@ -40,11 +40,9 @@ const credentialsSecretSuffix = "-credentials"
 // the secretRef field declared by the KuboCD Contracts, which are the schema of
 // record.
 //
-// A credentialsVersion digest used to be published alongside, so that rotating a
-// password changed the Connection and reached running pods. It was dropped: the
-// key alone changes nothing unless every consuming package propagates it into a
-// pod template annotation, and Reloader already restarts workloads when a Secret
-// they mount changes.
+// Rotating a credential does not touch the Connection: Reloader restarts the
+// workloads mounting the Secret, so a digest published here would only help a
+// package that propagated it into its pod template.
 const valueSecretRef = "secretRef"
 
 // ConnectionService manages the connections of a project and of the platform.
@@ -267,7 +265,7 @@ func (s *DefaultConnectionService) Update(ctx context.Context, namespace, name s
 		existing.Annotations = withCredentialsSecret(existing.Annotations, secretNamespace+"/"+secretName, true)
 	} else {
 		// The credentials did not change, so neither do the fields describing
-		// them — and they must be carried over: splitValues rebuilt the values
+		// them, and they must be carried over: splitValues rebuilt the values
 		// from the request, which no longer mentions them.
 		for _, key := range []string{valueSecretRef} {
 			if previous, ok := existing.Spec.Values[key]; ok {
@@ -367,9 +365,9 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 	}
 
 	// A contract may publish several addresses. The verdict is the one a
-	// workload will actually take; the other checks travel along for diagnosis,
-	// because a store reachable publicly and unreachable in-cluster is exactly
-	// the case a green test used to hide.
+	// workload will actually take, and the other checks travel along for
+	// diagnosis: a store reachable publicly and unreachable in-cluster passes
+	// and fails at once.
 	checks := tester(ctx, values)
 	outcome := result(true, "", "Connection successful.")
 	outcome.Checks = checks
@@ -390,14 +388,10 @@ func (s *DefaultConnectionService) Test(ctx context.Context, req models.Connecti
 // only those: a Connection the release controller owns, born from the `outputs`
 // stanza of a package.
 //
-// The console used to add entries it fabricated itself, by matching a release's
-// `okdp.io/service` label against a hardcoded list and guessing an address from
-// the Kubernetes Service whose name looked closest. Those entries had no
-// Connection behind them, so nothing could ever bind them: ListSelectable only
-// offers real ones. They looked exactly like the real entries, and the tab
-// invited the user to wire a service to them, which left copying an address by
-// hand as the only way through. A service that publishes nothing is now absent
-// rather than approximated.
+// A service that publishes nothing is absent rather than approximated. An entry
+// with no Connection behind it could not be bound anyway, since ListSelectable
+// only offers real ones, and it would invite the user to wire a service to
+// something that does not exist.
 func (s *DefaultConnectionService) ListInternal(ctx context.Context, project string) ([]models.InternalConnection, error) {
 	if !s.repo.Available(ctx) {
 		return []models.InternalConnection{}, nil
@@ -570,9 +564,7 @@ func splitValues(descriptor *models.ContractDescriptor, values map[string]any) (
 }
 
 func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namespace string) models.ConnectionResponse {
-	// One type, one contract. The label that used to carry the type separately
-	// is gone, and reading it would only resurrect the names of types that no
-	// longer exist.
+	// One type, one contract: the contract of the spec is the whole answer.
 	contractName := connection.Spec.Contract
 
 	values := connection.Spec.Values
@@ -615,7 +607,7 @@ func (s *DefaultConnectionService) toResponse(connection *crd.Connection, namesp
 // managedBy names the release a connection belongs to, for the message shown
 // when someone tries to edit or delete it. The controller fills status.parent
 // only once it has reconciled, so a connection can legitimately be managed
-// with no parent yet — saying `release ""` would read like a bug.
+// with no parent yet, saying `release ""` would read like a bug.
 func managedBy(connection *crd.Connection) string {
 	if parent := connection.Status.Parent; parent != "" {
 		return fmt.Sprintf("is provided by the deployed service %q", parent)
@@ -745,8 +737,8 @@ func referencesConnection(refs []crd.InputConnectionReference, project, name str
 }
 
 // credentialsOwned reports whether the console wrote the credentials Secret.
-// Connections created before the annotation existed fall back on the naming
-// convention, which is what the console itself used to assume.
+// A Connection carrying no such annotation falls back on the naming
+// convention.
 func credentialsOwned(annotations map[string]string, connectionName, secretName string) bool {
 	if raw, present := annotations[AnnotationCredentialsOwned]; present {
 		owned, err := strconv.ParseBool(raw)

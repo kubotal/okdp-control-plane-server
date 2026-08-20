@@ -13,15 +13,12 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-// ContextWriterRepository manages the platform service catalog on the default
+// ContextWriterRepository manages the platform service catalog on the platform
 // Context (spec.context.serviceCatalog.services).
 //
-// It used to also clone the default Context into a per-project one and re-sync it
-// on every deployment. That was dropped: the sync overwrote spec.context whole, so
-// a project could never differ from the default, and touching the default
-// reconciled every Release referencing it. KuboCD already does this properly,
-// through Config.defaultNamespaceContexts, which resolves an optional Context by
-// name in the namespace of each Release.
+// Per-project configuration is not its business: KuboCD resolves an optional
+// Context by name in the namespace of each Release, through
+// Config.defaultNamespaceContexts.
 type ContextWriterRepository interface {
 	// AddPlatformService appends a service to the default Context's serviceCatalog.services.
 	AddPlatformService(ctx context.Context, svc models.PlatformService) error
