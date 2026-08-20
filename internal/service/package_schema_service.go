@@ -34,6 +34,7 @@ type PackageSchemaService interface {
 	// the console can offer a choice for each one at deployment time.
 	GetPackageInputs(ctx context.Context, serviceName, tag string) ([]models.PackageInput, error)
 	GetServiceVersions(ctx context.Context, serviceName string) (*ServiceVersionsResponse, error)
+	ListVersionsForServices(ctx context.Context, services []models.PlatformService) map[string][]string
 	// ListPackageTags returns the tags published in the OCI registry for a service's
 	// package, even if the service is not (yet) in the catalog. repositoryOverride
 	// takes precedence over the Context's global package repository when non-empty.
@@ -43,6 +44,7 @@ type PackageSchemaService interface {
 type DefaultPackageSchemaService struct {
 	contextRepo        repository.ContextRepository
 	cache              sync.Map
+	tagsCache          sync.Map
 	cacheTTL           time.Duration
 	insecureRegistries []string
 }
@@ -96,7 +98,7 @@ func (s *DefaultPackageSchemaService) GetServiceVersions(ctx context.Context, se
 		packageRepo = svcRepository
 	}
 
-	versions, err := s.listOCITags(packageRepo, serviceName)
+	versions, err := s.listOCITagsCached(packageRepo, serviceName)
 	if err != nil {
 		logrus.WithError(err).Warnf("failed to list OCI tags for %s, falling back to default version", serviceName)
 		if defaultVersion != "" {
@@ -113,6 +115,75 @@ func (s *DefaultPackageSchemaService) GetServiceVersions(ctx context.Context, se
 // ListPackageTags resolves the package repository from the Context (or the
 // per-service override when set) and lists the OCI tags published for the given
 // service's package.
+const tagsCacheTTL = 5 * time.Minute
+
+type tagsCacheEntry struct {
+	tags      []string
+	fetchedAt time.Time
+}
+
+func (s *DefaultPackageSchemaService) cachedTags(repo, name string) ([]string, bool) {
+	if e, ok := s.tagsCache.Load(repo + "/" + name); ok {
+		ce := e.(*tagsCacheEntry)
+		if time.Since(ce.fetchedAt) < tagsCacheTTL {
+			return ce.tags, true
+		}
+	}
+	return nil, false
+}
+
+func (s *DefaultPackageSchemaService) listOCITagsCached(repo, name string) ([]string, error) {
+	if tags, ok := s.cachedTags(repo, name); ok {
+		return tags, nil
+	}
+	tags, err := s.listOCITags(repo, name)
+	if err != nil {
+		return nil, err
+	}
+	s.tagsCache.Store(repo+"/"+name, &tagsCacheEntry{tags: tags, fetchedAt: time.Now()})
+	return tags, nil
+}
+
+func (s *DefaultPackageSchemaService) ListVersionsForServices(ctx context.Context, services []models.PlatformService) map[string][]string {
+	defaultRepo, err := s.contextRepo.GetPackageRepository(ctx)
+	if err != nil {
+		logrus.WithError(err).Warn("failed to get package repository, skipping OCI version discovery")
+		return map[string][]string{}
+	}
+
+	type result struct {
+		name string
+		tags []string
+	}
+
+	results := make(chan result, len(services))
+	var wg sync.WaitGroup
+	for _, svc := range services {
+		wg.Add(1)
+		go func(svc models.PlatformService) {
+			defer wg.Done()
+			repo := defaultRepo
+			if svc.Repository != "" {
+				repo = svc.Repository
+			}
+			tags, err := s.listOCITagsCached(repo, svc.Name)
+			if err != nil {
+				logrus.WithError(err).Warnf("failed to list OCI tags for %s", svc.Name)
+				return
+			}
+			results <- result{name: svc.Name, tags: tags}
+		}(svc)
+	}
+	wg.Wait()
+	close(results)
+
+	versions := make(map[string][]string, len(services))
+	for r := range results {
+		versions[r.name] = r.tags
+	}
+	return versions
+}
+
 func (s *DefaultPackageSchemaService) ListPackageTags(ctx context.Context, serviceName, repositoryOverride string) ([]string, error) {
 	packageRepo, err := s.contextRepo.GetPackageRepository(ctx)
 	if err != nil {
