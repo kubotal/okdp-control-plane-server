@@ -138,11 +138,17 @@ func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 // @Produce      json
 // @Param        name path string true "Project Name"
 // @Success      204  {object}  nil
+// @Failure      404  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
 // @Router       /api/projects/{name} [delete]
 func (h *ProjectHandler) DeleteProject(c *gin.Context) {
 	name := c.Param("name")
 	if err := h.service.DeleteProject(c.Request.Context(), name); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		logrus.WithError(err).Error("Failed to delete project")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
