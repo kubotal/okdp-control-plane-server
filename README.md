@@ -102,6 +102,21 @@ kubectl get crd | grep kubocd
 # releases.kubocd.kubotal.io
 ```
 
+The `Release` objects the server creates carry no explicit `spec.contexts`: they
+take the platform configuration from the Contexts the KuboCD `Config` declares,
+through `defaultContexts` and `defaultNamespaceContexts`. A cluster whose Config
+declares neither renders its packages against an empty configuration, so the
+platform `Context` this server reads must also be listed there. For example:
+
+```yaml
+apiVersion: kubocd.kubotal.io/v1alpha1
+kind: Config
+spec:
+  defaultContexts:
+    - name: platform
+      namespace: okdp-system
+```
+
 Install the chart from the OKDP registry:
 
 ```sh
@@ -109,9 +124,8 @@ helm install okdp-control-plane-server oci://quay.io/okdp/charts/okdp-control-pl
   -n okdp-system --create-namespace
 ```
 
-> The chart was renamed from `okdp-server` to match this repository. Only
-> `okdp-server` is published on Quay today, so this path resolves once the rename
-> lands upstream. Until then, install from `chart/` in this checkout.
+> This chart name is published on Quay once the rename lands upstream. Until
+> then, install from `chart/` in this checkout.
 
 Once the pod is `Running`, reach the API through a port-forward:
 
@@ -185,8 +199,8 @@ its `configuration:` values (see [`chart/values.yaml`](chart/values.yaml)).
 | `ALLOWED_ORIGINS` | Single CORS origin, set verbatim in `Access-Control-Allow-Origin` (the console URL) | `http://localhost:4200` | No |
 | `LOG_LEVEL` | Log verbosity (`debug`, `info`, `warn`, `error`) | `info` | No |
 | `KUBOCD_NAMESPACE` | Namespace where KuboCD runs | `kubocd-system` | No |
-| `CONTEXT_NAME` | Name of the KuboCD `Context` holding the service catalog | `default` | No |
-| `CONTEXT_NAMESPACE` | Namespace of that `Context` | `kubocd-system` | No |
+| `CONTEXT_NAME` | Name of the KuboCD `Context` holding the platform configuration | `platform` | No |
+| `CONTEXT_NAMESPACE` | Namespace of that `Context` | the server's own namespace | No |
 | `RELEASE_INTERVAL` | Reconcile interval set on created KuboCD `Release`s | `30m` | No |
 | `RELEASE_TIMEOUT` | Timeout set on created KuboCD `Release`s | `10m` | No |
 | `EXCLUDED_SIDECAR_PREFIXES` | Container name prefixes excluded from pod/metrics views (comma-separated) | `istio-proxy,istio-init,dynatrace-,linkerd-proxy,envoy,vault-agent` | No |
