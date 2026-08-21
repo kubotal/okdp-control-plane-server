@@ -4,7 +4,20 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "component": "okdp-server"
+      "component": "okdp-control-plane-server",
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "chart/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "chart/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
     }
   }
 }
