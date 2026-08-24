@@ -570,28 +570,7 @@ func (h *ServiceHandler) GetPodLogs(c *gin.Context) {
 	defer stream.Close()
 
 	if follow {
-		w := c.Writer
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Transfer-Encoding", "chunked")
-		w.Flush()
-
-		scanner := newLogStreamScanner(stream)
-		for scanner.Scan() {
-			select {
-			case <-c.Request.Context().Done():
-				return
-			default:
-				c.SSEvent("message", scanner.Text())
-				w.Flush()
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			logrus.WithError(err).Warn("Log stream ended on a scanner error")
-			c.SSEvent("error", logStreamErrorMessage(err))
-			w.Flush()
-		}
+		followLogStreamSSE(c, stream)
 	} else {
 		c.Header("Content-Type", "text/plain; charset=utf-8")
 		c.DataFromReader(http.StatusOK, -1, "text/plain; charset=utf-8", stream, nil)
